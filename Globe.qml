@@ -13,6 +13,8 @@ Item {
     property color borderColor: "#748aa4"
     property color gridColor: "#6e849d"
     property color dotColor: "#ff8a3d"
+    property color myColor: "#ff3b30"
+    property color otherColor: "#4ea1ff"
     property color outlineColor: borderColor
     property color textColor: "#f3f4f5"
     property string fontFamily: "monospace"
@@ -21,6 +23,7 @@ Item {
     property real hoverY: 0
     property var preparedCountries: []
     property var preparedDots: []
+    property string myCountryCode: ""
 
     property real zoom: 1.0
     property real panX: 0.0
@@ -198,18 +201,21 @@ Item {
         for (var d = 0; d < preparedDots.length; d++) {
             var row = preparedDots[d]
             var share = Math.sqrt((Number(row.dot.count) || 0) / maxCount)
+            var mine = String(row.dot.code).toUpperCase() === String(root.myCountryCode).toUpperCase()
+            var base = mine ? root.myColor : root.otherColor
             var radius = 1.6 + share * 1.8
+            if (mine) radius += 1.2
             var isHover = root.hoveredDot && root.hoveredDot.code === row.dot.code
             for (var o = 0; o < offsets.length; o++) {
                 var s = toScreen(row.x + offsets[o], row.y)
                 if (s.x < -20 || s.x > canvas.width + 20 || s.y < -20 || s.y > canvas.height + 20) continue
-                ctx.beginPath(); ctx.arc(s.x, s.y, radius + 2.5, 0, Math.PI * 2)
-                ctx.fillStyle = alpha(root.dotColor, 0.14); ctx.fill()
+                ctx.beginPath(); ctx.arc(s.x, s.y, radius + (mine ? 5 : 2.5), 0, Math.PI * 2)
+                ctx.fillStyle = alpha(base, mine ? 0.28 : 0.14); ctx.fill()
                 ctx.beginPath(); ctx.arc(s.x, s.y, radius, 0, Math.PI * 2)
-                ctx.fillStyle = root.dotColor; ctx.fill()
-                if (isHover) {
+                ctx.fillStyle = base; ctx.fill()
+                if (isHover || mine) {
                     ctx.beginPath(); ctx.arc(s.x, s.y, radius + 3, 0, Math.PI * 2)
-                    ctx.strokeStyle = root.dotColor; ctx.lineWidth = 1.4; ctx.stroke()
+                    ctx.strokeStyle = base; ctx.lineWidth = 1.4; ctx.stroke()
                 }
             }
         }

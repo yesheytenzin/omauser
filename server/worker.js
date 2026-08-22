@@ -6,8 +6,8 @@
 // Endpoints:
 //   POST /api/register  { deviceHash, omarchyVersion, appVersion }
 //   POST /api/forget    { deviceHash }
-//   GET  /api/stats     { total, active30d, updatedAt, countries: [...] }
-//   GET  /api/map       stats + { dots: [{code,name,count,lat,lon}] }
+//   GET  /api/stats     { total, active30d, updatedAt, countries: [...], myCountry }
+//   GET  /api/map       stats + { dots: [{code,name,count,lat,lon}], myCountry }
 //
 // KV layout:
 //   device:<sha256>        -> record (TTL 1 year = retention window)
@@ -136,7 +136,8 @@ export default {
 
       if (request.method === "GET" && (path === "/api/stats" || path === "/api/map")) {
         const stats = await cachedStats(env, false);
-        if (path === "/api/stats") return json(stats, 200, headers);
+        const myCountry = (request.headers.get("cf-ipcountry") || "XX").toUpperCase();
+        if (path === "/api/stats") return json(Object.assign({}, stats, { myCountry }), 200, headers);
         const dots = stats.countries
           .filter(c => COUNTRY[c.code])
           .map(c => ({
@@ -146,7 +147,7 @@ export default {
             lat: COUNTRY[c.code][1],
             lon: COUNTRY[c.code][2]
           }));
-        return json(Object.assign({}, stats, { dots }), 200, headers);
+        return json(Object.assign({}, stats, { dots, myCountry }), 200, headers);
       }
 
       return json({ ok: false, error: "not found" }, 404, headers);

@@ -25,6 +25,7 @@ BarWidget {
     property bool registered: false
     property int total: 0
     property int active30d: 0
+    property string myCountry: ""
     property string lastError: ""
 
     // Opt-in is the default: a fresh install registers automatically once
@@ -183,6 +184,7 @@ BarWidget {
                 var json = JSON.parse(statsCacheProc.out);
                 root.total = json.total || 0;
                 root.active30d = json.active30d || 0;
+                if (typeof json.myCountry === "string") root.myCountry = json.myCountry;
             } catch (e) {}
             statsCacheProc.out = "";
         }

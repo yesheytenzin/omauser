@@ -138,6 +138,7 @@ Panel {
                 id: globe
                 anchors.fill: parent
                 dots: root.dots
+                myCountryCode: root.hostWidget && root.hostWidget.myCountry ? root.hostWidget.myCountry : ""
                 activeCountryCode: root.hostWidget && root.hostWidget.myCountry ? root.hostWidget.myCountry : ""
                 backgroundColor: Color.popups.background
                 landColor: Qt.darker(Color.foreground, 2.7)
