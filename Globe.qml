@@ -22,6 +22,11 @@ Item {
     property var preparedCountries: []
     property var preparedDots: []
 
+    readonly property real mapWidth: Math.min(canvas.width, canvas.height * 2)
+    readonly property real mapHeight: mapWidth / 2
+    readonly property real mapLeft: (canvas.width - mapWidth) / 2
+    readonly property real mapTop: (canvas.height - mapHeight) / 2
+
     function alpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
 
     function flag(code) {
@@ -32,8 +37,8 @@ Item {
     }
 
     function project(lon, lat) {
-        return { x: (Number(lon) + 180) / 360 * canvas.width,
-                 y: (90 - Number(lat)) / 180 * canvas.height }
+        return { x: root.mapLeft + (Number(lon) + 180) / 360 * root.mapWidth,
+                 y: root.mapTop + (90 - Number(lat)) / 180 * root.mapHeight }
     }
 
     function prepare() {
@@ -74,11 +79,11 @@ Item {
         ctx.lineWidth = 1
         for (var lon = -150; lon <= 180; lon += 30) {
             var x = project(lon, 0).x
-            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(x, root.mapTop); ctx.lineTo(x, root.mapTop + root.mapHeight); ctx.stroke()
         }
         for (var lat = -60; lat <= 60; lat += 30) {
             var y = project(0, lat).y
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(root.mapLeft, y); ctx.lineTo(root.mapLeft + root.mapWidth, y); ctx.stroke()
         }
     }
 
