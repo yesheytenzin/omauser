@@ -61,4 +61,4 @@ node --input-type=module -e "
 - `wrangler.toml` — config; paste your KV namespace id into `id`
 - `mock.py` — zero-dep local API for UI development
 - `gen_map.py` — legacy helper for the flat-map asset; the panel now uses the
-  Canvas globe and `assets/countries.json`
+  Canvas world map and `assets/countries.json` (50m geometry)

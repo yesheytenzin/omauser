@@ -82,8 +82,8 @@ omarchy-restart-shell                 # needed after QML edits (component cache)
 quickshell ipc -p /usr/share/omarchy/shell call tenzin.omauser status
 ```
 
-`assets/countries.json` contains simplified country geometry derived from
-public-domain [Natural Earth](https://www.naturalearthdata.com/) 110m data.
+`assets/countries.json` contains higher-resolution country geometry derived
+from public-domain [Natural Earth](https://www.naturalearthdata.com/) 50m data.
 See `NOTICE.md` for attribution.
 
 The map is rendered locally with Qt Canvas. No map tiles or external map
