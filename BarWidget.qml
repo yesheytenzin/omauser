@@ -206,8 +206,16 @@ BarWidget {
     Process {
         id: statsProc
         command: ["bash", root.bridge, "stats"]
+        stdout: SplitParser { onRead: function(data) { statsProc.out += data + "\n" } }
+        property string out: ""
         onExited: function(exitCode) {
-            root.lastError = exitCode === 0 ? "" : "offline — showing last cached data";
+            // Surface rate-limit feedback distinctly; 429 is expected on free tier.
+            if (exitCode !== 0 && statsProc.out.indexOf("429") !== -1) {
+                root.lastError = "rate limited — retry tomorrow"
+            } else {
+                root.lastError = exitCode === 0 ? "" : "offline — showing last cached data";
+            }
+            statsProc.out = ""
             // Backoff bookkeeping: success resets to normal 5-min cadence.
             if (exitCode === 0) root.statsFails = 0;
             else root.statsFails = Math.min(root.statsFails + 1, 6);
@@ -220,9 +228,18 @@ BarWidget {
         id: registerProc
         property string out: ""
         stdout: SplitParser {
-            onRead: function(data) { registerProc.out += data }
+            onRead: function(data) { registerProc.out += data + "\n" }
         }
         onExited: function(exitCode) {
+            if (registerProc.out.indexOf("rate limited") !== -1 || registerProc.out.indexOf("429") !== -1) {
+                root.lastError = "rate limited — retry later"
+            } else if (registerProc.out.indexOf("global limit") !== -1) {
+                root.lastError = "server busy today — try again tomorrow"
+            } else if (exitCode !== 0) {
+                root.lastError = "registration failed — offline?"
+            } else {
+                root.lastError = ""
+            }
             registerProc.out = "";
             root.refreshState();
             // Force-refresh after join/leave so the bar count comes from a

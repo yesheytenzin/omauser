@@ -35,6 +35,8 @@ const RECORD_TTL_SECONDS = 365 * 24 * 60 * 60;
 const STATS_CACHE_TTL_SECONDS = 300;
 const RATE_LIMIT_PER_DAY_IP = 100;
 const RATE_LIMIT_PER_DAY_HASH = 60;
+const GLOBAL_NEW_CAP = 500; // max new installs/day on free tier
+const HEARTBEAT_LIMIT_PER_DAY = 30; // heartbeats of known devices
 const MAX_BODY_BYTES = 2048;
 // Records unseen for this long are pruned nightly: salt-reset orphans and
 // abandoned installs drop off, so `total` tracks recently-alive installs.
@@ -81,6 +83,24 @@ async function rateLimit(env, ip, hash) {
     env.OMAUSER.put(ipKey, JSON.stringify(ipCount + 1), { expirationTtl: 86400 }),
     env.OMAUSER.put(hashKey, JSON.stringify(hCount + 1), { expirationTtl: 86400 }),
   ]);
+  return true;
+}
+
+async function rateLimitHeartbeat(env, hash) {
+  const day = new Date().toISOString().slice(0, 10);
+  const hbKey = `rl:hb:${day}:${hash}`;
+  const c = (await env.OMAUSER.get(hbKey, "json")) || 0;
+  if (c >= HEARTBEAT_LIMIT_PER_DAY) return false;
+  await env.OMAUSER.put(hbKey, JSON.stringify(c + 1), { expirationTtl: 86400 });
+  return true;
+}
+
+async function checkGlobalNewCap(env) {
+  const day = new Date().toISOString().slice(0, 10);
+  const key = `rl:global:new:${day}`;
+  const c = (await env.OMAUSER.get(key, "json")) || 0;
+  if (c >= GLOBAL_NEW_CAP) return false;
+  await env.OMAUSER.put(key, JSON.stringify(c + 1), { expirationTtl: 86400 });
   return true;
 }
 
@@ -255,11 +275,17 @@ export default {
         const now = Date.now();
         const { rec: existing, key, needsMigration } = await getDeviceWithKey(env, body.deviceHash);
         const isNew = !existing;
-        // Only rate-limit new registrations; heartbeats of known devices pass.
         if (isNew) {
+          if (!(await checkGlobalNewCap(env))) {
+            return json({ ok: false, error: "global limit reached — try again tomorrow" }, 429, headers);
+          }
           const ip = request.headers.get("cf-connecting-ip") || "unknown";
           if (!(await rateLimit(env, ip, body.deviceHash))) {
             return json({ ok: false, error: "rate limited" }, 429, headers);
+          }
+        } else {
+          if (!(await rateLimitHeartbeat(env, body.deviceHash))) {
+            return json({ ok: false, error: "too many heartbeats today" }, 429, headers);
           }
         }
         const rec = existing || { hash: body.deviceHash, firstSeen: now };
