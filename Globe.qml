@@ -112,14 +112,14 @@ Item {
         for (var d = 0; d < preparedDots.length; d++) {
             var row = preparedDots[d]
             var share = Math.sqrt((Number(row.dot.count) || 0) / maxCount)
-            var radius = 4 + share * 9
-            ctx.beginPath(); ctx.arc(row.x, row.y, radius + 6, 0, Math.PI * 2)
-            ctx.fillStyle = alpha(root.dotColor, 0.16); ctx.fill()
+            var radius = 1.6 + share * 1.8
+            ctx.beginPath(); ctx.arc(row.x, row.y, radius + 2.5, 0, Math.PI * 2)
+            ctx.fillStyle = alpha(root.dotColor, 0.14); ctx.fill()
             ctx.beginPath(); ctx.arc(row.x, row.y, radius, 0, Math.PI * 2)
             ctx.fillStyle = root.dotColor; ctx.fill()
             if (root.hoveredDot && root.hoveredDot.code === row.dot.code) {
-                ctx.beginPath(); ctx.arc(row.x, row.y, radius + 5, 0, Math.PI * 2)
-                ctx.strokeStyle = root.dotColor; ctx.lineWidth = 2; ctx.stroke()
+                ctx.beginPath(); ctx.arc(row.x, row.y, radius + 3, 0, Math.PI * 2)
+                ctx.strokeStyle = root.dotColor; ctx.lineWidth = 1.4; ctx.stroke()
             }
         }
     }
