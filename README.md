@@ -96,8 +96,8 @@ omarchy plugin validate .
 python3 server/mock.py                # local API with sample data
 # point a test install at it:
 OMAUSER_API_URL=http://127.0.0.1:8777 bash omauser-setup.sh
-# test in the live shell:
-rsync -a --delete --exclude .git . ~/.config/omarchy/plugins/tenzin.omauser/
+# test in the live shell (preserve .git so `omarchy plugin update` keeps working):
+rsync -a --delete . ~/.config/omarchy/plugins/tenzin.omauser/
 omarchy-restart-shell                 # needed after QML edits (component cache)
 quickshell ipc -p /usr/share/omarchy/shell call tenzin.omauser status
 ```

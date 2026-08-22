@@ -318,9 +318,7 @@ Panel {
 
     function joinMap() {
         if (onMap || loading) return
-        // Optimistic: update counts and dot instantly with correct lat/lon
-        total = total + 1
-        active30d = active30d + 1
+        // Optimistic: add dot instantly at correct location, counts will be confirmed by server
         var code = hostWidget && hostWidget.myCountry ? String(hostWidget.myCountry).toUpperCase() : ""
         if (code) {
             var found = false
@@ -333,8 +331,6 @@ Panel {
                 var coord = countryCoords[code]
                 if (coord) {
                     dots = dots.concat([{code: code, name: code, count: 1, lat: coord[0], lon: coord[1]}])
-                } else {
-                    dots = dots.concat([{code: code, name: code, count: 1, lat: 0, lon: 0}])
                 }
             }
         }
@@ -342,7 +338,6 @@ Panel {
         if (hostWidget) {
             hostWidget.registered = true
             hostWidget.optedOut = false
-            // hostWidget total is separate, BarWidget will handle its own optimistic
         }
         if (hostWidget && hostWidget.joinMap) hostWidget.joinMap()
         fetchMap(true)
@@ -350,9 +345,6 @@ Panel {
 
     function optOut() {
         if (!onMap || loading) return
-        // Optimistic: decrement instantly
-        if (total > 0) total = total - 1
-        if (active30d > 0) active30d = active30d - 1
         var code2 = hostWidget && hostWidget.myCountry ? String(hostWidget.myCountry).toUpperCase() : ""
         if (code2) {
             for (var j = 0; j < dots.length; j++) {

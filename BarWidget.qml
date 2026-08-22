@@ -27,6 +27,7 @@ BarWidget {
     property int active30d: 0
     property string myCountry: ""
     property string lastError: ""
+    property bool _ignoreNextStatusTotal: false
 
     // Opt-in is the default: a fresh install registers automatically once
     // the bridge is up. The user can leave the map from the panel UI.
@@ -71,7 +72,7 @@ BarWidget {
 
     function joinMap() {
         if (!root.bridgeReady) return;
-        if (!root.registered) { root.total = root.total + 1; root.active30d = root.active30d + 1 }
+        if (root.registered) return
         root.optedOut = false;
         root.registered = true
         registerProc.command = ["bash", root.bridge, "join"];
@@ -80,8 +81,7 @@ BarWidget {
 
     function optOut() {
         if (!root.bridgeReady) return;
-        if (root.registered && root.total > 0) root.total = root.total - 1
-        if (root.registered && root.active30d > 0) root.active30d = root.active30d - 1
+        if (!root.registered) return
         root.optedOut = true;
         root.registered = false
         registerProc.command = ["bash", root.bridge, "opt-out"];
@@ -106,8 +106,12 @@ BarWidget {
         if (!json) return;
         root.optedOut = json.optedOut === true;
         root.registered = json.registered === true;
-        if (json.lastTotal !== undefined && json.lastTotal !== null) root.total = json.lastTotal;
-        if (json.lastActive !== undefined && json.lastActive !== null) root.active30d = json.lastActive;
+        if (!root._ignoreNextStatusTotal) {
+            if (json.lastTotal !== undefined && json.lastTotal !== null) root.total = json.lastTotal;
+            if (json.lastActive !== undefined && json.lastActive !== null) root.active30d = json.lastActive;
+        } else {
+            root._ignoreNextStatusTotal = false
+        }
         root.bridgeReady = true;
         root.installing = false;
         root.readStatsCache();
@@ -133,6 +137,7 @@ BarWidget {
                 optedOut: root.optedOut,
                 registered: root.registered,
                 total: root.total,
+                myCountry: root.myCountry,
                 active30d: root.active30d,
                 panelLoaded: panelLoader.item !== null,
                 panelOpened: panelLoader.item ? panelLoader.item.opened === true : false,
