@@ -16,14 +16,17 @@
 //   GET  /api/stats     { total, active30d, updatedAt, countries: [...], myCountry }
 //                       ?force=1 rebuilds from scan instead of cache
 //   GET  /api/map       stats + { dots: [{code,name,count,lat,lon}], myCountry }
+//                       dots cluster per ~11 km city cell (CF IP geo),
+//                       falling back to the country centroid
 //
 // KV layout:
-//   device:<sha256>        -> record {hash, firstSeen, lastSeen, country, ...} TTL 1y
+//   device:<sha256>        -> record {hash, firstSeen, lastSeen, country,
+//                               cityLat, cityLon, cityName} TTL 1y
 //   rl:<date>:<ip>         -> per-IP daily rate-limit counter (24h TTL)
 //   rl:hash:<date>:<hash>  -> per-hash daily limit
 //   cache:stats            -> { at, payload } TTL 5m (shared response cache)
 // D1 layout (if bound as DB):
-//   devices(hash PK, country, lastSeen, firstSeen) - counts via SQL GROUP BY
+//   devices(hash PK, country, lastSeen, firstSeen, cityLat, cityLon, cityName)
 import { COUNTRY } from "./countries.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -120,6 +123,11 @@ async function listDevices(env) {
 // list propagation may not show yet; opts.removeHash excludes a just-deleted
 // one that propagation may still return. This makes join/leave responses and
 // the shared cache correct immediately, then converge with KV.
+//
+// Dots are aggregated per (country, ~11 km city cell): devices carry a
+// quantized location derived server-side from Cloudflare's IP geo, so users
+// in the same city cluster on that city while country centroid remains the
+// fallback when IP geo is unavailable.
 async function buildStatsFromScan(env, opts = {}) {
   const now = Date.now();
   // Apply any very recent explicit write that list propagation may hide.
@@ -139,17 +147,41 @@ async function buildStatsFromScan(env, opts = {}) {
     devices.push(opts.addRec);
   }
   const byCountry = {};
+  const cells = new Map(); // dotKey -> {code, name, count, lat, lon, hasGeo}
   let total = 0, active30d = 0;
   for (const d of devices) {
     total++;
     if (now - (d.lastSeen || 0) <= ACTIVE_WINDOW_MS) active30d++;
     const code = typeof d.country === "string" && /^[A-Z]{2}$/.test(d.country) ? d.country : "XX";
     byCountry[code] = (byCountry[code] || 0) + 1;
+
+    const hasGeo = Number.isFinite(d.cityLat) && Number.isFinite(d.cityLon);
+    const key = hasGeo ? `${code}|${d.cityLat}|${d.cityLon}` : `${code}|fallback`;
+    let cell = cells.get(key);
+    if (!cell) {
+      cell = { code, name: d.cityName || "", count: 0,
+               lat: hasGeo ? d.cityLat : null, lon: hasGeo ? d.cityLon : null, hasGeo };
+      cells.set(key, cell);
+    }
+    cell.count++;
+    if (!cell.name && d.cityName) cell.name = d.cityName;
   }
   const countries = Object.keys(byCountry)
     .map(code => ({ code, count: byCountry[code] }))
     .sort((a, b) => b.count - a.count);
-  return { total, active30d, updatedAt: now, countries };
+
+  // Resolve fallback cells to their country centroid; skip unknown codes.
+  const dots = [];
+  for (const cell of cells.values()) {
+    const meta = COUNTRY[cell.code];
+    if (!meta) continue;
+    const lat = cell.hasGeo ? cell.lat : meta[1];
+    const lon = cell.hasGeo ? cell.lon : meta[2];
+    const name = cell.name || meta[0];
+    dots.push({ code: cell.code, name, count: cell.count, lat, lon });
+  }
+  dots.sort((a, b) => b.count - a.count);
+  return { total, active30d, updatedAt: now, countries, dots };
 }
 
 async function buildStatsFromD1(env) {
@@ -158,12 +190,27 @@ async function buildStatsFromD1(env) {
   const rows = await env.DB.prepare(
     "SELECT country AS code, COUNT(*) AS count FROM devices GROUP BY country ORDER BY count DESC"
   ).all();
-  return {
-    total: total?.n || 0,
-    active30d: active?.n || 0,
-    updatedAt: Date.now(),
-    countries: (rows.results || []).map(r => ({ code: r.code, count: r.count })),
-  };
+  const countries = (rows.results || []).map(r => ({ code: r.code, count: r.count }));
+  // City-cell dots (fallback handled client-side via COUNTRY centroids).
+  let dots = [];
+  try {
+    const grows = await env.DB.prepare(
+      `SELECT country AS code, MAX(cityName) AS cityName, cityLat, cityLon, COUNT(*) AS count
+       FROM devices WHERE cityLat IS NOT NULL AND cityLon IS NOT NULL
+       GROUP BY country, cityLat, cityLon`
+    ).all();
+    dots = (grows.results || [])
+      .filter(r => COUNTRY[r.code])
+      .map(r => ({
+        code: r.code,
+        name: r.cityName || COUNTRY[r.code][0],
+        count: r.count,
+        lat: r.cityLat,
+        lon: r.cityLon,
+      }))
+      .sort((a, b) => b.count - a.count);
+  } catch {}
+  return { total: total?.n || 0, active30d: active?.n || 0, updatedAt: Date.now(), countries, dots };
 }
 
 // Stats come from a device scan (or D1 when bound); the shared cache absorbs
@@ -218,6 +265,14 @@ export default {
         rec.country = /^[A-Z]{2}$/.test(country) ? country : "XX";
         rec.omarchyVersion = typeof body.omarchyVersion === "string" ? body.omarchyVersion.slice(0, 64) : "";
         rec.appVersion = typeof body.appVersion === "string" ? body.appVersion.slice(0, 32) : "";
+        // Approx city (~11 km grid) from Cloudflare's IP geo of THIS request.
+        // Never stored raw; the client sends no location data at all.
+        const cf = request.cf || {};
+        const glat = Number(cf.latitude), glon = Number(cf.longitude);
+        const hasGeo = Number.isFinite(glat) && Number.isFinite(glon);
+        rec.cityLat = hasGeo ? Math.round(glat * 10) / 10 : null;
+        rec.cityLon = hasGeo ? Math.round(glon * 10) / 10 : null;
+        rec.cityName = typeof cf.city === "string" && cf.city ? cf.city.slice(0, 64) : "";
         const putKey = needsMigration ? await storageKey(env, body.deviceHash) : key;
         await env.OMAUSER.put(putKey, JSON.stringify(rec), { expirationTtl: RECORD_TTL_SECONDS });
         if (needsMigration) await env.OMAUSER.delete(key);
@@ -228,8 +283,11 @@ export default {
         if (env.DB) {
           try {
             await env.DB.prepare(
-              "INSERT INTO devices(hash,country,lastSeen,firstSeen) VALUES(?,?,?,?) ON CONFLICT(hash) DO UPDATE SET country=excluded.country, lastSeen=excluded.lastSeen"
-            ).bind(rec.hash, rec.country, rec.lastSeen, rec.firstSeen).run();
+              `INSERT INTO devices(hash,country,lastSeen,firstSeen,cityLat,cityLon,cityName)
+               VALUES(?,?,?,?,?,?,?)
+               ON CONFLICT(hash) DO UPDATE SET country=excluded.country, lastSeen=excluded.lastSeen,
+                 cityLat=excluded.cityLat, cityLon=excluded.cityLon, cityName=excluded.cityName`
+            ).bind(rec.hash, rec.country, rec.lastSeen, rec.firstSeen, rec.cityLat, rec.cityLon, rec.cityName).run();
           } catch {}
         }
 
@@ -272,18 +330,9 @@ export default {
           if (force) h["cache-control"] = "no-store";
           return json(Object.assign({}, stats, { myCountry: safeCountry }), 200, h);
         }
-        const dots = stats.countries
-          .filter(c => COUNTRY[c.code])
-          .map(c => ({
-            code: c.code,
-            name: COUNTRY[c.code][0],
-            count: c.count,
-            lat: COUNTRY[c.code][1],
-            lon: COUNTRY[c.code][2]
-          }));
         const h2 = Object.assign({}, headers);
         if (force) h2["cache-control"] = "no-store";
-        return json(Object.assign({}, stats, { dots, myCountry: safeCountry }), 200, h2);
+        return json(Object.assign({}, stats, { dots: stats.dots || [], myCountry: safeCountry }), 200, h2);
       }
 
       return json({ ok: false, error: "not found" }, 404, headers);

@@ -21,7 +21,6 @@ BarWidget {
     property bool bridgeReady: false
     property bool installing: false
     property string bridgeError: ""
-    property bool optedOut: false
     property bool registered: false
     property int total: 0
     property int active30d: 0
@@ -31,7 +30,7 @@ BarWidget {
 
     // Opt-in is the default: a fresh install registers automatically once
     // the bridge is up. The user can leave the map from the panel UI.
-    readonly property bool shouldAutoRegister: root.bridgeReady && !root.optedOut && !root.registered
+    readonly property bool shouldAutoRegister: root.bridgeReady && !root.registered
 
     readonly property string countLabel: {
         if (root.total <= 0) return "0";
@@ -83,18 +82,9 @@ BarWidget {
 
     function joinMap() {
         if (!root.bridgeReady) return;
-        if (root.registered && !registerProc.running) return
-        root.optedOut = false;
+        if (root.registered) return
         root.registered = true
         _startRegister("join");
-    }
-
-    function optOut() {
-        if (!root.bridgeReady) return;
-        if (!root.registered && !registerProc.running) return
-        root.optedOut = true;
-        root.registered = false
-        _startRegister("opt-out");
     }
 
     function togglePanel() {
@@ -113,12 +103,10 @@ BarWidget {
 
     function applyStatus(json) {
         if (!json) return;
-        // While a join/leave is in flight, the optimistic registered/optedOut
-        // values are authoritative - state.json may be stale (slow forget)
-        // and must not resurrect the opposite state mid-operation.
+        // While a register is in flight, the optimistic registered value is
+        // authoritative - state.json may be stale and must not flip it back.
         const inflight = registerProc.running;
         if (!inflight) {
-            root.optedOut = json.optedOut === true;
             root.registered = json.registered === true;
         }
         if (!root._ignoreNextStatusTotal) {
@@ -141,7 +129,6 @@ BarWidget {
 
         function refresh(): void { root.broadcast("refreshState"); }
         function join(): void { root.broadcast("joinMap"); }
-        function optOut(): void { root.broadcast("optOut"); }
         function toggle(): void { root.broadcast("togglePanel"); }
         function refreshMap(): void {
             if (panelLoader.item && panelLoader.item.fetchMap) panelLoader.item.fetchMap();
@@ -149,7 +136,6 @@ BarWidget {
         function status(): string {
             return JSON.stringify({
                 bridgeReady: root.bridgeReady,
-                optedOut: root.optedOut,
                 registered: root.registered,
                 total: root.total,
                 myCountry: root.myCountry,
@@ -273,7 +259,7 @@ BarWidget {
         // 23h base + jitter ±1h + initial random delay to spread heartbeats
         interval: 82800000 + Math.floor(Math.random() * 7200000 - 3600000)
         repeat: true
-        running: root.bridgeReady && !root.optedOut
+        running: root.bridgeReady && root.registered
         onTriggered: {
             heartbeatProc.command = ["bash", root.bridge, "heartbeat"];
             heartbeatProc.running = true
@@ -290,11 +276,9 @@ BarWidget {
         bar: root.bar
         text: "人"
         slotSize: Style.bar.statusSlot
-        tooltipText: root.optedOut
-            ? "Omauser \u2022 not on the map \u2022 " + root.fmt(root.total) + " users \u2022 click to join"
-            : (root.bridgeReady
-                ? "Omauser \u2022 " + root.fmt(root.total) + " users \u00b7 " + root.fmt(root.active30d) + " active (30d) \u2022 click for the map"
-                : (root.bridgeError || "Omauser \u2022 not installed; click to retry"))
+        tooltipText: root.bridgeReady
+            ? "Omauser \u2022 " + root.fmt(root.total) + " users \u00b7 " + root.fmt(root.active30d) + " active (30d) \u2022 click for the map"
+            : (root.bridgeError || "Omauser \u2022 not installed; click to retry")
         onPressed: root.togglePanel()
     }
 

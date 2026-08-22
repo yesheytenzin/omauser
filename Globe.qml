@@ -268,6 +268,8 @@ Item {
     onHeightChanged: root.prepare()
     onZoomChanged: clampPan()
     onHoveredDotChanged: canvas.requestPaint()
+    // Recolor without waiting for any other repaint trigger
+    onMyCountryCodeChanged: canvas.requestPaint()
 
     Canvas {
         id: canvas

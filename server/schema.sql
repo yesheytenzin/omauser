@@ -5,8 +5,14 @@ CREATE TABLE IF NOT EXISTS devices (
   hash TEXT PRIMARY KEY,
   country TEXT NOT NULL,
   lastSeen INTEGER NOT NULL,
-  firstSeen INTEGER NOT NULL
+  firstSeen INTEGER NOT NULL,
+  cityLat REAL,
+  cityLon REAL,
+  cityName TEXT
 );
+ALTER TABLE devices ADD COLUMN cityLat REAL;  -- ignore error if exists
+ALTER TABLE devices ADD COLUMN cityLon REAL;  -- ignore error if exists
+ALTER TABLE devices ADD COLUMN cityName TEXT; -- ignore error if exists
 CREATE TABLE IF NOT EXISTS stats (
   id INTEGER PRIMARY KEY CHECK (id=1),
   total INTEGER NOT NULL,

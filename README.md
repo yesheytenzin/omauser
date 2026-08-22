@@ -1,8 +1,8 @@
 # Omauser
 
 Count every Omarchy install and show a world map of Omarchy users
-from the bar. **Opt-in by default** — installing the plugin puts your
-device on the globe, and leaving it is one click in the panel UI.
+from the bar. Installing the plugin automatically adds your device
+to the globe — no account, no configuration, nothing to click.
 
 ## What it does
 
@@ -17,17 +17,26 @@ device on the globe, and leaving it is one click in the panel UI.
 
 This is the whole contract — the server cannot learn more:
 
-| Sent (client → server)                          | Derived server-side          | Never collected / Encrypted                 |
-|-------------------------------------------------|------------------------------|---------------------------------------------|
-| `sha256(salt + sha256(machine-id))` per-device salt `~/.cache/omauser/device-salt` (never sent) | country from `CF-IPCountry`  | IP address (not stored, only ephemeral `rl:*` 24h) |
-| Omarchy version                                 | totals per country           | precise location, name, hostname            |
-| plugin version                                  |                              | raw `machine-id`                            |
+| Sent (client → server)                          | Derived server-side                        | Never collected / Encrypted                 |
+|-------------------------------------------------|--------------------------------------------|---------------------------------------------|
+| `sha256(salt + sha256(machine-id))` per-device salt `~/.cache/omauser/device-salt` (never sent) | country from `CF-IPCountry`                | IP address (not stored, only ephemeral `rl:*` 24h) |
+| Omarchy version                                 | approx city (~11 km grid) from CF IP geo   | precise location, name, hostname            |
+| plugin version                                  | totals per country/city                    | raw `machine-id`                            |
 
-- The client never sends coordinates; the server derives the country from
-  the connecting IP and discards the IP. The `deviceHash` is **double-hashed with a per-device random salt** (`bridge.sh:device_hash`), so the `device:<hash>` key in KV is opaque — even with KV dump the admin cannot reverse to `machine-id` without the salt stored only on the device (`0600`).
-- Dots are **country centroids** (`server/countries.js`), not GPS — a dot covers a whole country.
-- Records are deduplicated by salted hash and expire after 12 months (`RECORD_TTL 1y`). `leave` deletes `device:*` + decrements `stats:aggregate` `O(1)`.
-- You can leave at any time: panel → `leave` (red `人` → `urgent` pill) or bar `人` → `Esc`. Register is rate-limited per IP `100/day` / per hash `20/day` (only new devices, heartbeats unlimited would be abused — now limited).
+- The client never sends coordinates; the server derives country and a
+  **~11 km-quantized** location from the connecting IP via Cloudflare's geo
+  and discards the IP. Raw points are never stored — only the rounded cell.
+- The `deviceHash` is **double-hashed with a per-device random salt**
+  (`bridge.sh:device_hash`), so the `device:<hash>` key in KV is opaque —
+  even with a KV dump the admin cannot reverse it to `machine-id` without
+  the salt stored only on the device (`0600`).
+- Map dots cluster per city-cell (`server/worker.js:buildStatsFromScan`);
+  users in the same ~11 km area share one dot with a count. When IP geo is
+  unavailable, the dot falls back to the country centroid.
+- Records are deduplicated by salted hash and expire after 12 months.
+  `leave` deletes the record server-side in O(1).
+- Rate limits: new registrations 100/IP/day + 60/hash/day; heartbeats of
+  known devices are exempt.
 
 ## Install (direct, no extra languages)
 
@@ -39,9 +48,10 @@ omarchy-restart-shell
 
 **No `npm`, `pip`, `node`, or `go` required.** The bar/panel is pure `QML` + `Quickshell` (preinstalled with Omarchy). The bridge is `bash` + `curl` + `jq` + `sha256sum`/`openssl` — all Arch `core`/`extra` (auto-installed by `omauser-setup.sh` if missing). `assets/countries.json` is bundled; the only network is `https://omauser.yesheytenzin09.workers.dev` (Cloudflare Worker + KV, already deployed).
 
-Installing/enabling the plugin registers the device automatically
-(opt-in by default). Opt out any time from the panel → **Remove my device**;
-your record is deleted server-side and nothing is sent afterwards.
+Installing/enabling the plugin registers the device automatically.
+Participation is automatic and there is no in-UI opt-out; power users can
+still POST their own `deviceHash` to `/api/forget` (see API below) — the
+record is deleted server-side and nothing further is sent.
 
 ## Update
 
