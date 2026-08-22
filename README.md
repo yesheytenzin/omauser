@@ -112,7 +112,9 @@ are dedup by device hash and per-IP rate limiting.
 
 ```bash
 omarchy plugin validate .
-python3 server/mock.py                # local API with sample data
+python3 server/mock.py                # multi-user simulator: 8 devices, 7 city dots,
+                                      # rotates viewpoints (write a slug like "tokyo" to
+                                      # /tmp/omauser-mock-persona to pin one)
 # point a test install at it:
 OMAUSER_API_URL=http://127.0.0.1:8777 bash omauser-setup.sh
 # test in the live shell (preserve .git so `omarchy plugin update` keeps working):

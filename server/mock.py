@@ -2,51 +2,49 @@
 """Local mock of the Omauser Cloudflare Worker API for UI development.
 
 Usage:
-    python3 server/mock.py [--port 8777]
+    python3 server/mock.py [--port 8777] [--persona-file /tmp/omauser-mock-persona]
 
-Simulates:
-    POST /api/register   (uses the X-Mock-Country header instead of cf-ipcountry)
-    POST /api/forget
-    GET  /api/stats
-    GET  /api/map
+Simulates a world where several users run the plugin from different cities.
+Every GET /api/stats|/map response is rendered *from one device's
+perspective*: `myCountry` / `myCell` describe the viewing device, so the UI
+should paint that device's city dot red and everything else blue.
 
-The sample dataset places dots on every continent so the panel has
-something to render before the real worker has any users.
+Persona selection per request:
+    1. X-Omauser-Persona header (city slug), e.g. "tokyo"
+    2. contents of --persona-file if it exists (one slug)
+    3. round-robin rotation
+
+This lets you screenshot the panel as each simulated user: write a slug to
+the persona file, trigger a refresh, capture, repeat.
 """
 import argparse
 import json
+import os
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-SAMPLE = {
-    "US": 412, "IN": 287, "BR": 198, "DE": 176, "GB": 154, "JP": 121, "FR": 108,
-    "CA": 96, "AU": 84, "PL": 72, "ES": 66, "IT": 58, "NL": 52, "SE": 47,
-    "MX": 41, "NG": 36, "TR": 33, "AR": 29, "ZA": 26, "EG": 21, "KR": 24,
-    "ID": 27, "TH": 19, "PK": 31, "RU": 18, "NO": 14, "FI": 12, "GR": 10,
-    "NZ": 9, "PT": 8,
-}
+# Simulated installs. Each entry is also a viewpoint (persona).
+DEVICES = [
+    {"slug": "thimphu",   "hash": "sim0001", "country": "BT", "city": "Thimphu",   "lat": 27.5, "lon": 89.6},
+    {"slug": "sarpang",   "hash": "sim0002", "country": "BT", "city": "Sarpang",   "lat": 26.9, "lon": 90.3},
+    {"slug": "newyork",   "hash": "sim0003", "country": "US", "city": "New York",  "lat": 40.7, "lon": -74.0},
+    {"slug": "newyork-2", "hash": "sim0004", "country": "US", "city": "New York",  "lat": 40.7, "lon": -74.0},
+    {"slug": "tokyo",     "hash": "sim0005", "country": "JP", "city": "Tokyo",     "lat": 35.7, "lon": 139.7},
+    {"slug": "berlin",    "hash": "sim0006", "country": "DE", "city": "Berlin",    "lat": 52.5, "lon": 13.4},
+    {"slug": "mumbai",    "hash": "sim0007", "country": "IN", "city": "Mumbai",    "lat": 19.1, "lon": 72.9},
+    {"slug": "saopaulo",  "hash": "sim0008", "country": "BR", "city": "São Paulo", "lat": -23.6, "lon": -46.6},
+]
 
-COUNTRIES = {
-    "US": ["United States", 39.83, -98.58], "IN": ["India", 20.59, 78.96],
-    "BR": ["Brazil", -14.24, -51.93], "DE": ["Germany", 51.17, 10.45],
-    "GB": ["United Kingdom", 55.38, -3.44], "JP": ["Japan", 36.2, 138.25],
-    "FR": ["France", 46.23, 2.21], "CA": ["Canada", 56.13, -106.35],
-    "AU": ["Australia", -25.27, 133.78], "PL": ["Poland", 51.92, 19.15],
-    "ES": ["Spain", 40.46, -3.75], "IT": ["Italy", 41.87, 12.57],
-    "NL": ["Netherlands", 52.13, 5.29], "SE": ["Sweden", 60.13, 18.64],
-    "MX": ["Mexico", 23.63, -102.55], "NG": ["Nigeria", 9.08, 8.68],
-    "TR": ["Turkey", 38.96, 35.24], "AR": ["Argentina", -38.42, -63.62],
-    "ZA": ["South Africa", -30.56, 22.94], "EG": ["Egypt", 26.82, 30.8],
-    "KR": ["South Korea", 35.91, 127.77], "ID": ["Indonesia", -0.79, 113.92],
-    "TH": ["Thailand", 15.87, 100.99], "PK": ["Pakistan", 30.38, 69.35],
-    "RU": ["Russia", 61.52, 105.32], "NO": ["Norway", 60.47, 8.47],
-    "FI": ["Finland", 64.5, 26.07], "GR": ["Greece", 39.07, 21.82],
-    "NZ": ["New Zealand", -40.9, 174.89], "PT": ["Portugal", 39.4, -8.22],
+COUNTRY_NAMES = {
+    "US": "United States", "JP": "Japan", "DE": "Germany", "IN": "India",
+    "BR": "Brazil", "BT": "Bhutan",
 }
 
 class Handler(BaseHTTPRequestHandler):
-    devices = {}
+    rr = 0
+    persona_file = None
+    devices = {}  # transient registrations via POST
 
     def log_message(self, fmt, *args):
         sys.stderr.write("[mock] " + fmt % args + "\n")
@@ -59,16 +57,48 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _stats(self):
-        counts = dict(SAMPLE)
-        for rec in self.devices.values():
-            code = rec.get("country", "XX")
-            counts[code] = counts.get(code, 0) + 1
-        total = sum(counts.values())
+    def _all_devices(self):
+        return DEVICES + list(self.devices.values())
+
+    def _persona(self):
+        slug = self.headers.get("X-Omauser-Persona")
+        if not slug and self.persona_file and os.path.exists(self.persona_file):
+            try:
+                slug = open(self.persona_file).read().strip()
+            except OSError:
+                slug = None
+        pool = self._all_devices()
+        if slug:
+            for d in pool:
+                if d["slug"] == slug:
+                    return d
+            print(f"[mock] unknown persona '{slug}', falling back to rotation")
+        d = pool[Handler.rr % len(pool)]
+        Handler.rr += 1
+        return d
+
+    def _stats(self, me):
+        devices = self._all_devices()
+        cells, by_country = {}, {}
+        total = active = 0
+        now_ms = int(time.time() * 1000)
+        for d in devices:
+            total += 1
+            active += 1
+            by_country[d["country"]] = by_country.get(d["country"], 0) + 1
+            key = (d["country"], d["lat"], d["lon"])
+            cell = cells.setdefault(key, {"code": d["country"], "name": d["city"],
+                                          "count": 0, "lat": d["lat"], "lon": d["lon"]})
+            cell["count"] += 1
         countries = [{"code": c, "count": n} for c, n in
-                     sorted(counts.items(), key=lambda kv: -kv[1])]
-        return {"total": total, "active30d": total, "updatedAt": int(time.time() * 1000),
-                "countries": countries}
+                     sorted(by_country.items(), key=lambda kv: -kv[1])]
+        dots = sorted(cells.values(), key=lambda c: -c["count"])
+        return {
+            "total": total, "active30d": active, "updatedAt": now_ms,
+            "countries": countries, "dots": dots,
+            "myCountry": me["country"],
+            "myCell": {"lat": me["lat"], "lon": me["lon"]},
+        }
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
@@ -80,39 +110,39 @@ class Handler(BaseHTTPRequestHandler):
             h = body.get("deviceHash", "")
             if len(h) != 64:
                 return self._json({"ok": False, "error": "invalid deviceHash"}, 400)
-            country = (self.headers.get("X-Mock-Country") or "XX").upper()
-            rec = self.devices.get(h, {"hash": h, "firstSeen": int(time.time() * 1000)})
+            rec = self.devices.get(h, {"slug": f"live-{h[:8]}", "hash": h,
+                                       "country": "XX", "city": "", "lat": None, "lon": None,
+                                       "firstSeen": int(time.time() * 1000)})
             rec["lastSeen"] = int(time.time() * 1000)
-            rec["country"] = country
             rec["omarchyVersion"] = body.get("omarchyVersion", "")
             self.devices[h] = rec
-            print(f"[mock] registered device {h[:12]}... country={country}")
-            return self._json({"ok": True, "stats": self._stats()})
+            print(f"[mock] registered {h[:12]}... (perspective unchanged)")
+            return self._json({"ok": True, "stats": self._stats(self._persona())})
         if self.path == "/api/forget":
             self.devices.pop(body.get("deviceHash", ""), None)
-            print(f"[mock] forgot device {str(body.get('deviceHash', ''))[:12]}...")
             return self._json({"ok": True})
         return self._json({"ok": False, "error": "not found"}, 404)
 
     def do_GET(self):
-        if self.path in ("/api/stats", "/api/map"):
-            stats = self._stats()
-            if self.path == "/api/map":
-                dots = [{"code": c["code"], "name": COUNTRIES[c["code"]][0],
-                         "count": c["count"], "lat": COUNTRIES[c["code"]][1],
-                         "lon": COUNTRIES[c["code"]][2]}
-                        for c in stats["countries"] if c["code"] in COUNTRIES]
-                stats = {**stats, "dots": dots}
-            return self._json(stats)
+        if self.path.startswith("/api/stats") or self.path.startswith("/api/map"):
+            me = self._persona()
+            stats = self._stats(me)
+            print(f"[mock] serving perspective: {me['slug']} ({me['country']})")
+            if self.path.startswith("/api/map"):
+                return self._json(stats)
+            slim = {k: v for k, v in stats.items() if k != "dots"}
+            return self._json(slim)
         return self._json({"ok": False, "error": "not found"}, 404)
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8777)
+    parser.add_argument("--persona-file", default="/tmp/omauser-mock-persona")
     args = parser.parse_args()
+    Handler.persona_file = args.persona_file
     print(f"[mock] Omauser mock API on http://127.0.0.1:{args.port}")
-    print(f"[mock] register with: curl -X POST http://127.0.0.1:{args.port}/api/register "
-          "-H 'X-Mock-Country: IN' -d '{{\"deviceHash\":\"<64 hex chars>\"}}'")
+    print(f"[mock] personas: {[d['slug'] for d in DEVICES]}")
+    print(f"[mock] sticky persona file: {args.persona_file} (or X-Omauser-Persona header)")
     HTTPServer(("127.0.0.1", args.port), Handler).serve_forever()
 
 if __name__ == "__main__":
