@@ -317,47 +317,55 @@ Panel {
     }
 
     function joinMap() {
+        if (onMap || loading) return
         // Optimistic: update counts and dot instantly with correct lat/lon
-        if (!onMap) {
-            total = total + 1
-            active30d = active30d + 1
-            var code = hostWidget && hostWidget.myCountry ? String(hostWidget.myCountry).toUpperCase() : ""
-            if (code) {
-                var found = false
-                for (var i = 0; i < dots.length; i++) {
-                    if (String(dots[i].code).toUpperCase() === code) {
-                        var nd = dots.slice(); nd[i] = Object.assign({}, nd[i], {count: (Number(nd[i].count)||0)+1}); dots = nd; found = true; break
-                    }
-                }
-                if (!found) {
-                    var coord = countryCoords[code]
-                    if (coord) {
-                        dots = dots.concat([{code: code, name: code, count: 1, lat: coord[0], lon: coord[1]}])
-                    } else {
-                        dots = dots.concat([{code: code, name: code, count: 1, lat: 0, lon: 0}])
-                    }
+        total = total + 1
+        active30d = active30d + 1
+        var code = hostWidget && hostWidget.myCountry ? String(hostWidget.myCountry).toUpperCase() : ""
+        if (code) {
+            var found = false
+            for (var i = 0; i < dots.length; i++) {
+                if (String(dots[i].code).toUpperCase() === code) {
+                    var nd = dots.slice(); nd[i] = Object.assign({}, nd[i], {count: (Number(nd[i].count)||0)+1}); dots = nd; found = true; break
                 }
             }
+            if (!found) {
+                var coord = countryCoords[code]
+                if (coord) {
+                    dots = dots.concat([{code: code, name: code, count: 1, lat: coord[0], lon: coord[1]}])
+                } else {
+                    dots = dots.concat([{code: code, name: code, count: 1, lat: 0, lon: 0}])
+                }
+            }
+        }
+        // Ensure host widget flips immediately so button text changes to "leave"
+        if (hostWidget) {
+            hostWidget.registered = true
+            hostWidget.optedOut = false
+            // hostWidget total is separate, BarWidget will handle its own optimistic
         }
         if (hostWidget && hostWidget.joinMap) hostWidget.joinMap()
         fetchMap(true)
     }
 
     function optOut() {
-        // Optimistic: decrement instantly if on map
-        if (onMap) {
-            if (total > 0) total = total - 1
-            if (active30d > 0) active30d = active30d - 1
-            var code2 = hostWidget && hostWidget.myCountry ? String(hostWidget.myCountry).toUpperCase() : ""
-            if (code2) {
-                for (var j = 0; j < dots.length; j++) {
-                    if (String(dots[j].code).toUpperCase() === code2) {
-                        if ((Number(dots[j].count)||0) <= 1) { var nd2 = dots.slice(); nd2.splice(j,1); dots = nd2 }
-                        else { var nd3 = dots.slice(); nd3[j] = Object.assign({}, nd3[j], {count: nd3[j].count-1}); dots = nd3 }
-                        break
-                    }
+        if (!onMap || loading) return
+        // Optimistic: decrement instantly
+        if (total > 0) total = total - 1
+        if (active30d > 0) active30d = active30d - 1
+        var code2 = hostWidget && hostWidget.myCountry ? String(hostWidget.myCountry).toUpperCase() : ""
+        if (code2) {
+            for (var j = 0; j < dots.length; j++) {
+                if (String(dots[j].code).toUpperCase() === code2) {
+                    if ((Number(dots[j].count)||0) <= 1) { var nd2 = dots.slice(); nd2.splice(j,1); dots = nd2 }
+                    else { var nd3 = dots.slice(); nd3[j] = Object.assign({}, nd3[j], {count: nd3[j].count-1}); dots = nd3 }
+                    break
                 }
             }
+        }
+        if (hostWidget) {
+            hostWidget.registered = false
+            hostWidget.optedOut = true
         }
         if (hostWidget && hostWidget.optOut) hostWidget.optOut()
         fetchMap(true)
@@ -489,6 +497,7 @@ Panel {
                         foreground: Color.foreground
                         accent: Color.accent
                         bordered: true
+                        enabled: !root.loading
                         onClicked: root.onMap ? root.optOut() : root.joinMap()
                     }
                 }

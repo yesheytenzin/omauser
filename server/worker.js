@@ -22,8 +22,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const ACTIVE_WINDOW_MS = 30 * DAY_MS;
 const RECORD_TTL_SECONDS = 365 * 24 * 60 * 60;
 const STATS_CACHE_TTL_SECONDS = 300;
-const RATE_LIMIT_PER_DAY_IP = 10;
-const RATE_LIMIT_PER_DAY_HASH = 5;
+const RATE_LIMIT_PER_DAY_IP = 100;
+const RATE_LIMIT_PER_DAY_HASH = 20;
 const MAX_BODY_BYTES = 2048;
 
 function json(data, status, headers) {
@@ -180,15 +180,18 @@ export default {
         if (!body || typeof body.deviceHash !== "string" || !/^[a-f0-9]{64}$/.test(body.deviceHash)) {
           return json({ ok: false, error: "invalid deviceHash" }, 400, headers);
         }
-        const ip = request.headers.get("cf-connecting-ip") || "unknown";
-        if (!(await rateLimit(env, ip, body.deviceHash))) {
-          return json({ ok: false, error: "rate limited" }, 429, headers);
-        }
         const country = (request.headers.get("cf-ipcountry") || "XX").toUpperCase().slice(0, 2);
         const now = Date.now();
         const key = storageKey(env, body.deviceHash);
         const existing = await env.OMAUSER.get(key, "json");
         const isNew = !existing || typeof existing.hash !== "string";
+        // Only rate-limit new device registrations, not heartbeats (existing devices)
+        if (isNew) {
+          const ip = request.headers.get("cf-connecting-ip") || "unknown";
+          if (!(await rateLimit(env, ip, body.deviceHash))) {
+            return json({ ok: false, error: "rate limited" }, 429, headers);
+          }
+        }
         const rec = isNew ? { hash: body.deviceHash, firstSeen: now } : existing;
         const wasActive = existing && (now - (existing.lastSeen || 0) <= ACTIVE_WINDOW_MS);
         rec.lastSeen = now;
@@ -197,11 +200,19 @@ export default {
         rec.appVersion = typeof body.appVersion === "string" ? body.appVersion.slice(0, 32) : "";
         await env.OMAUSER.put(key, JSON.stringify(rec), { expirationTtl: RECORD_TTL_SECONDS });
 
-        // Incremental aggregate update (O(1), no scan)
+        // Incremental aggregate update (O(1), no scan) with stale-heal
         let agg = await env.OMAUSER.get("stats:aggregate", "json");
         if (!agg) agg = await buildAggregateFromScan(env);
         if (!agg.byCountry) agg.byCountry = {};
-        if (isNew) {
+        // Heal stale aggregate: if device exists but aggregate is empty/0, it was built from a stale scan
+        const aggHasCountry = !!agg.byCountry[rec.country];
+        if (!isNew && !aggHasCountry && (agg.total || 0) === 0) {
+          // Stale aggregate missed this existing device - heal
+          agg.byCountry[rec.country] = 1;
+          agg.total = 1;
+          agg.active30d = 1;
+          // No further handling needed
+        } else if (isNew) {
           agg.total = (agg.total || 0) + 1;
           agg.byCountry[rec.country] = (agg.byCountry[rec.country] || 0) + 1;
           if (!wasActive) agg.active30d = (agg.active30d || 0) + 1;
@@ -209,11 +220,22 @@ export default {
           // Existing: handle country move and re-activation
           const oldCountry = typeof existing.country === "string" ? existing.country : "XX";
           if (oldCountry !== rec.country) {
-            agg.byCountry[oldCountry] = Math.max(0, (agg.byCountry[oldCountry] || 1) - 1);
-            if (agg.byCountry[oldCountry] === 0) delete agg.byCountry[oldCountry];
+            // Only decrement old if it was actually counted
+            if (agg.byCountry[oldCountry]) {
+              agg.byCountry[oldCountry] = Math.max(0, agg.byCountry[oldCountry] - 1);
+              if (agg.byCountry[oldCountry] === 0) delete agg.byCountry[oldCountry];
+            }
             agg.byCountry[rec.country] = (agg.byCountry[rec.country] || 0) + 1;
+          } else if (!aggHasCountry) {
+            // Same country but not in aggregate (stale) - add
+            agg.byCountry[rec.country] = 1;
+            agg.total = (agg.total || 0) + 1;
+            agg.active30d = (agg.active30d || 0) + 1;
+          } else if (!wasActive) {
+            agg.active30d = (agg.active30d || 0) + 1;
           }
-          if (!wasActive) agg.active30d = (agg.active30d || 0) + 1;
+          // Heal active if stale (total>0 but active 0, device is active now)
+          if ((agg.active30d || 0) === 0 && (agg.total || 0) > 0) agg.active30d = 1;
         }
         agg.updatedAt = now;
         await Promise.all([
