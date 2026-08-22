@@ -43,6 +43,22 @@ Installing/enabling the plugin registers the device automatically
 (opt-in by default). Opt out any time from the panel → **Remove my device**;
 your record is deleted server-side and nothing is sent afterwards.
 
+## Update
+
+```bash
+omarchy plugin update tenzin.omauser
+omarchy-restart-shell
+```
+
+## Remove
+
+```bash
+omarchy plugin remove tenzin.omauser --yes
+# also clear local cache (optional):
+rm -rf ~/.cache/omauser
+omarchy-restart-shell
+```
+
 ## Server
 
 The aggregation backend is a Cloudflare Worker + KV (see `server/`):
