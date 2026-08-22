@@ -1,14 +1,14 @@
 # Omauser
 
-Count every Omarchy install and show a live world map of Omarchy users
+Count every Omarchy install and show a rotatable globe of Omarchy users
 from the bar. **Opt-in by default** — installing the plugin puts your
-device on the map, and leaving it is one click in the panel UI.
+device on the globe, and leaving it is one click in the panel UI.
 
 ## What it does
 
 - A bar widget shows the total user count and 30-day active count.
-- Clicking it opens a world map panel; dots are sized by the number of
-  users in each country. Hover a dot for country + count + share.
+- Clicking it opens a globe-only panel. Drag to rotate, scroll to zoom,
+  and hover a dot for country + count.
 - A right rail lists the top 10 countries plus your own on/off state:
   **Remove my device** leaves the map and deletes the server record;
   **Join the map** puts you back on.
@@ -82,9 +82,13 @@ omarchy-restart-shell                 # needed after QML edits (component cache)
 quickshell ipc -p /usr/share/omarchy/shell call tenzin.omauser status
 ```
 
-`assets/world.svg` is generated from public-domain
-[Natural Earth](https://www.naturalearthdata.com/) 110m land data
-(`server/gen_map.py` regenerates it).
+`assets/countries.json` contains simplified country geometry derived from
+public-domain [Natural Earth](https://www.naturalearthdata.com/) 110m data.
+See `NOTICE.md` for attribution.
+
+The Canvas globe interaction is adapted from
+[omarchy-radio-atlas](https://github.com/AksharP5/omarchy-radio-atlas),
+MIT licensed.
 
 ## License
 
