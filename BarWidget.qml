@@ -274,9 +274,10 @@ BarWidget {
             id: countPill
             visible: root.bridgeReady
             Layout.alignment: Qt.AlignVCenter
+            Layout.preferredHeight: Style.bar.statusSlot
             implicitWidth: Math.max(28, pillText.implicitWidth + 16)
-            implicitHeight: 18
-            radius: 9
+            implicitHeight: Style.bar.statusSlot
+            radius: Style.bar.statusSlot / 2
             color: root.optedOut
                 ? Qt.rgba(Color.urgent.r, Color.urgent.g, Color.urgent.b, 0.14)
                 : (root.registered
