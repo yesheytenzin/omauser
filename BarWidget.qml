@@ -247,11 +247,25 @@ BarWidget {
             slotSize: Style.bar.statusSlot
             fontSize: Style.font.caption
             tooltipText: root.optedOut
-                ? "Omauser \u2022 you are not on the map \u2022 " + root.fmt(root.total) + " users"
+                ? "Omauser \u2022 not on the map \u2022 " + root.fmt(root.total) + " users \u2022 click to join"
                 : (root.bridgeReady
-                    ? "Omauser \u2022 " + root.fmt(root.total) + " users \u00b7 " + root.fmt(root.active30d) + " active (30d)"
+                    ? "Omauser \u2022 " + root.fmt(root.total) + " users \u00b7 " + root.fmt(root.active30d) + " active (30d) \u2022 click for the map"
                     : (root.bridgeError || "Omauser \u2022 not installed; click to retry"))
             onPressed: root.togglePanel()
+        }
+
+        Rectangle {
+            Layout.preferredWidth: 6
+            Layout.preferredHeight: 6
+            Layout.alignment: Qt.AlignVCenter
+            Layout.leftMargin: 2
+            radius: 3
+            color: root.registered && !root.optedOut
+                ? Color.accent
+                : (root.optedOut ? Color.urgent : Qt.darker(Color.foreground, 1.6))
+            opacity: root.bridgeReady ? 1.0 : 0.4
+
+            Behavior on color { ColorAnimation { duration: 160 } }
         }
 
         Text {

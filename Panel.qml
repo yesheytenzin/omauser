@@ -31,14 +31,15 @@ Panel {
 
     readonly property bool onMap: hostWidget ? hostWidget.registered === true : false
     readonly property bool optedOut: hostWidget ? hostWidget.optedOut === true : false
-    readonly property bool notJoined: !root.onMap
+
+    readonly property color dim: Qt.darker(Color.foreground, 1.3)
 
     function fmt(n) {
         return Number(n || 0).toLocaleString();
     }
 
     function formatUpdated(ms) {
-        if (!ms) return "";
+        if (!ms) return "never";
         var d = new Date(ms);
         var hh = d.getHours();
         var mm = d.getMinutes();
@@ -47,6 +48,13 @@ Panel {
 
     function pct(count) {
         return root.total > 0 ? Math.round(count / root.total * 100) : 0;
+    }
+
+    function flagEmoji(code) {
+        if (!code || code.length !== 2) return "";
+        var a = code.charCodeAt(0), b = code.charCodeAt(1);
+        if (a < 65 || a > 90 || b < 65 || b > 90) return "";
+        return String.fromCodePoint(0x1F1E6 + a - 65) + String.fromCodePoint(0x1F1E6 + b - 65);
     }
 
     function fetchMap() {
@@ -150,6 +158,49 @@ Panel {
         if (root.opened && !root.loaded && !root.loading) root.fetchMap();
     }
 
+    // ---------------- shared pieces ----------------
+
+    component StatCard: Rectangle {
+        id: card
+        property string label: ""
+        property string value: ""
+        property bool highlight: false
+        readonly property color dim: Qt.darker(Color.foreground, 1.3)
+
+        Layout.fillWidth: true
+        Layout.preferredHeight: Style.space(62)
+        color: Color.popups.background
+        radius: Style.cornerRadius
+        border.width: 1
+        border.color: card.highlight ? Color.accent : Color.popups.border
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.leftMargin: Style.spacing.md
+            anchors.rightMargin: Style.spacing.md
+            spacing: 0
+
+            Text {
+                Layout.fillWidth: true
+                text: card.value
+                font.family: Style.font.family
+                font.pixelSize: Style.font.heading
+                font.bold: true
+                color: card.highlight ? Color.accent : Color.foreground
+            }
+            Text {
+                Layout.fillWidth: true
+                text: card.label
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                color: dim
+                font.capitalization: Font.AllUppercase
+                font.bold: true
+                elide: Text.ElideRight
+            }
+        }
+    }
+
     KeyboardPanel {
         id: panel
         anchorItem: root.anchorItem
@@ -159,314 +210,266 @@ Panel {
         centerOnBar: true
         margin: Style.gapsOut
         gap: Style.gapsOut
-        contentWidth: panel.fittedContentWidth(panel.screenW * 0.66)
-        contentHeight: panel.fittedContentHeight(Math.min(panel.screenH * 0.72, 620))
+        contentWidth: panel.fittedContentWidth(panel.screenW * 0.70)
+        contentHeight: panel.fittedContentHeight(Math.min(panel.screenH * 0.76, 640))
 
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 14
-            spacing: Style.spacing.sm
+            spacing: Style.spacing.md
 
             // ---------------- header ----------------
-            RowLayout {
+            PanelHero {
                 Layout.fillWidth: true
-                spacing: Style.spacing.md
+                iconComponent: Component {
+                    Text {
+                        text: "\uf0ac"
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.display
+                        color: Color.accent
+                    }
+                }
+                title: "Omauser"
+                meta: "Omarchy user map"
+                detail: root.onMap ? "on the map" : (root.optedOut ? "opted out" : "offline")
 
-                Text {
-                    text: "\uf0ac"
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.title
-                    color: Color.accent
-                }
-                Text {
-                    text: "Omauser"
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.title
-                    font.bold: true
-                    color: Color.foreground
-                }
-                Text {
-                    text: "OMARCHY USER MAP"
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
-                    color: Qt.darker(Color.foreground, 1.3)
-                    font.capitalization: Font.AllUppercase
-                    Layout.topMargin: 2
-                }
-                Item { Layout.fillWidth: true }
-                Text {
-                    visible: root.offline
-                    text: "offline"
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
-                    color: Color.urgent
-                }
-                Text {
-                    text: "updated " + root.formatUpdated(root.updatedAt)
-                    visible: root.updatedAt > 0
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
-                    color: Qt.darker(Color.foreground, 1.3)
-                }
-                Button {
-                    text: "\uf021"
-                    fontSize: Style.font.caption
-                    foreground: Color.foreground
-                    tooltipText: "Refresh"
-                    onClicked: root.fetchMap()
+                trailingControl: Component {
+                    RowLayout {
+                        spacing: Style.spacing.sm
+                        Text {
+                            visible: root.offline
+                            text: "\uf071 offline"
+                            font.family: Style.font.family
+                            font.pixelSize: Style.font.caption
+                            color: Color.urgent
+                        }
+                        Button {
+                            text: "\uf021"
+                            fontSize: Style.font.caption
+                            foreground: Color.foreground
+                            tooltipText: "Refresh"
+                            onClicked: root.fetchMap()
+                        }
+                    }
                 }
             }
 
-            // ---------------- totals ----------------
+            // ---------------- stat cards ----------------
             RowLayout {
                 Layout.fillWidth: true
-                spacing: Style.spacing.lg
+                spacing: Style.spacing.sm
 
-                Text {
-                    text: root.fmt(root.total)
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.heading
-                    font.bold: true
-                    color: Color.accent
-                }
-                Text {
-                    text: "total users"
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
-                    color: Qt.darker(Color.foreground, 1.3)
-                    Layout.alignment: Qt.AlignVCenter
-                }
-                Text {
-                    text: "\u00b7"
-                    color: Qt.darker(Color.foreground, 1.3)
-                    font.pixelSize: Style.font.body
-                }
-                Text {
-                    text: root.fmt(root.active30d)
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.heading
-                    font.bold: true
-                    color: Color.foreground
-                }
-                Text {
-                    text: "active (30d)"
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
-                    color: Qt.darker(Color.foreground, 1.3)
-                    Layout.alignment: Qt.AlignVCenter
-                }
-                Item { Layout.fillWidth: true }
+                StatCard { label: "total users"; value: root.fmt(root.total); highlight: true }
+                StatCard { label: "active 30d"; value: root.fmt(root.active30d) }
+                StatCard { label: "countries"; value: String(root.dots.length) }
             }
 
             PanelSeparator { Layout.fillWidth: true; opacity: 0.5 }
 
-            // ---------------- map + side list ----------------
+            // ---------------- map + rail ----------------
             RowLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 spacing: Style.spacing.md
 
-                Item {
+                Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    color: "transparent"
+                    radius: Style.cornerRadius
                     clip: true
+                    border.width: 1
+                    border.color: Color.popups.border
 
-                    Image {
-                        id: mapImage
-                        anchors.fill: parent
-                        fillMode: Image.PreserveAspectFit
-                        source: Qt.resolvedUrl("assets/world.svg")
-                        smooth: true
-                    }
-
-                    // Dots: equirectangular projection on a 2:1 map. The map
-                    // is fit inside its area, so the dot layer tracks the
-                    // drawn image rect (centered, at most 2:1).
                     Item {
-                        id: dotLayer
-                        anchors.centerIn: parent
-                        width: Math.min(mapImage.paintedWidth > 0 ? mapImage.paintedWidth : parent.width,
-                                        parent.width)
-                        height: width / 2
+                        id: mapArea
+                        anchors.fill: parent
 
-                        Repeater {
-                            model: root.dots
-                            delegate: Item {
-                                required property var modelData
-                                readonly property real px: (modelData.lon + 180) / 360 * dotLayer.width
-                                readonly property real py: (90 - modelData.lat) / 180 * dotLayer.height
-                                readonly property real dotR: Math.max(3, Math.min(13,
-                                    2 + 9 * Math.sqrt(modelData.count / Math.max(1, root.maxCount))))
+                        Image {
+                            id: mapImage
+                            anchors.fill: parent
+                            fillMode: Image.PreserveAspectFit
+                            source: Qt.resolvedUrl("assets/world.svg")
+                            smooth: true
+                        }
 
-                                x: px - dotR
-                                y: py - dotR
-                                width: dotR * 2
-                                height: dotR * 2
+                        // equirectangular dot layer tracking the drawn image
+                        Item {
+                            id: dotLayer
+                            anchors.centerIn: parent
+                            width: Math.min(mapImage.paintedWidth > 0 ? mapImage.paintedWidth : parent.width,
+                                            parent.width)
+                            height: width / 2
 
-                                Rectangle {
-                                    anchors.fill: parent
-                                    radius: width / 2
-                                    color: root.onMap ? Color.accent : Color.urgent
-                                    opacity: 0.9
-                                    border.width: 1
-                                    border.color: Color.popups.background
-                                }
-                                Rectangle {
-                                    visible: dotMouse.containsMouse
-                                    anchors.centerIn: parent
-                                    width: parent.width + 6
-                                    height: parent.height + 6
-                                    radius: width / 2
-                                    color: "transparent"
-                                    border.width: 1.5
-                                    border.color: Color.accent
-                                }
+                            Repeater {
+                                model: root.dots
+                                delegate: Item {
+                                    required property var modelData
+                                    readonly property real px: (modelData.lon + 180) / 360 * dotLayer.width
+                                    readonly property real py: (90 - modelData.lat) / 180 * dotLayer.height
+                                    readonly property real dotR: Math.max(3.5, Math.min(14,
+                                        2.5 + 9.5 * Math.sqrt(modelData.count / Math.max(1, root.maxCount))))
 
-                                MouseArea {
-                                    id: dotMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                }
+                                    x: px - dotR
+                                    y: py - dotR
+                                    width: dotR * 2
+                                    height: dotR * 2
 
-                                ToolTip {
-                                    visible: dotMouse.containsMouse
-                                    delay: 200
-                                    text: modelData.name + " \u2014 " + root.fmt(modelData.count)
-                                        + " user" + (modelData.count === 1 ? "" : "s")
-                                        + " (" + root.pct(modelData.count) + "%)"
-                                    background: Rectangle {
-                                        color: Color.popups.background
-                                        radius: Style.cornerRadius
-                                        border.width: 1
-                                        border.color: Color.popups.border
+                                    Behavior on width { NumberAnimation { duration: 120 } }
+
+                                    Rectangle { // glow
+                                        anchors.centerIn: parent
+                                        width: parent.width + 10
+                                        height: parent.height + 10
+                                        radius: width / 2
+                                        color: Color.accent
+                                        opacity: 0.18
                                     }
-                                    contentItem: Text {
-                                        text: ToolTip.text
-                                        color: Color.foreground
-                                        font.family: Style.font.family
-                                        font.pixelSize: Style.font.caption
+                                    Rectangle { // body
+                                        anchors.fill: parent
+                                        radius: width / 2
+                                        color: Color.accent
+                                        border.width: 1.5
+                                        border.color: Color.popups.background
+                                        Behavior on width { NumberAnimation { duration: 120 } }
+                                    }
+                                    Rectangle { // hover ring
+                                        visible: dotMouse.containsMouse
+                                        anchors.centerIn: parent
+                                        width: parent.width + 8
+                                        height: parent.height + 8
+                                        radius: width / 2
+                                        color: "transparent"
+                                        border.width: 1.5
+                                        border.color: Color.accent
+                                    }
+
+                                    MouseArea {
+                                        id: dotMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                    }
+
+                                    ToolTip {
+                                        visible: dotMouse.containsMouse
+                                        delay: 200
+                                        text: root.flagEmoji(modelData.code) + "  " + modelData.name
+                                            + " \u2014 " + root.fmt(modelData.count)
+                                            + " user" + (modelData.count === 1 ? "" : "s")
+                                            + " (" + root.pct(modelData.count) + "%)"
+                                        background: Rectangle {
+                                            color: Color.popups.background
+                                            radius: Style.cornerRadius
+                                            border.width: 1
+                                            border.color: Color.popups.border
+                                        }
+                                        contentItem: Text {
+                                            text: ToolTip.text
+                                            color: Color.foreground
+                                            font.family: Style.font.family
+                                            font.pixelSize: Style.font.caption
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        // status overlays
-                        Text {
-                            anchors.centerIn: parent
-                            visible: root.loading
-                            text: "Loading the map \u2026"
-                            font.family: Style.font.family
-                            font.pixelSize: Style.font.body
-                            color: Color.foreground
-                        }
-                        Text {
-                            anchors.centerIn: parent
-                            visible: !root.loading && !root.loaded
-                            text: root.errorText
-                            font.family: Style.font.family
-                            font.pixelSize: Style.font.body
-                            color: Qt.darker(Color.foreground, 1.25)
-                            horizontalAlignment: Text.AlignHCenter
-                            width: parent.width * 0.7
-                            wrapMode: Text.WordWrap
-                        }
-                    }
-                }
+                            // legend
+                            RowLayout {
+                                anchors.left: parent.left
+                                anchors.leftMargin: Style.space(10)
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: Style.space(8)
+                                spacing: Style.spacing.xs
+                                visible: root.loaded && root.dots.length > 0
 
-                // ---------------- top countries ----------------
-                ColumnLayout {
-                    Layout.preferredWidth: Style.space(190)
-                    Layout.fillHeight: true
-                    spacing: Style.spacing.xs
-                    visible: root.countries.length > 0
-
-                    Text {
-                        text: "TOP COUNTRIES"
-                        font.family: Style.font.family
-                        font.pixelSize: Style.font.caption
-                        color: Qt.darker(Color.foreground, 1.3)
-                        font.capitalization: Font.AllUppercase
-                    }
-
-                    Item { Layout.fillHeight: true }
-
-                    Repeater {
-                        model: {
-                            var top = [];
-                            var n = Math.min(10, root.countries.length);
-                            for (var i = 0; i < n; i++) top.push(root.countries[i]);
-                            return top;
-                        }
-                        delegate: RowLayout {
-                            required property var modelData
-                            Layout.fillWidth: true
-                            spacing: Style.spacing.sm
-
-                            Rectangle {
-                                Layout.preferredWidth: 8
-                                Layout.preferredHeight: 8
-                                radius: 4
-                                color: root.onMap ? Color.accent : Color.urgent
-                                opacity: 0.85
-                                Layout.alignment: Qt.AlignVCenter
+                                Rectangle {
+                                    Layout.preferredWidth: 7
+                                    Layout.preferredHeight: 7
+                                    radius: 4
+                                    color: Color.accent
+                                }
+                                Text {
+                                    text: "dot size = users per country"
+                                    font.family: Style.font.family
+                                    font.pixelSize: Style.font.caption
+                                    color: root.dim
+                                }
                             }
+
+                            // status overlays
                             Text {
-                                Layout.fillWidth: true
-                                text: modelData.code
+                                anchors.centerIn: parent
+                                visible: root.loading
+                                text: "Loading the map \u2026"
                                 font.family: Style.font.family
-                                font.pixelSize: Style.font.caption
-                                font.bold: true
+                                font.pixelSize: Style.font.body
                                 color: Color.foreground
-                                elide: Text.ElideRight
                             }
                             Text {
-                                text: root.fmt(modelData.count)
+                                anchors.centerIn: parent
+                                visible: !root.loading && !root.loaded
+                                text: root.errorText
                                 font.family: Style.font.family
-                                font.pixelSize: Style.font.caption
-                                color: Qt.darker(Color.foreground, 1.25)
+                                font.pixelSize: Style.font.body
+                                color: root.dim
+                                horizontalAlignment: Text.AlignHCenter
+                                width: parent.width * 0.7
+                                wrapMode: Text.WordWrap
                             }
                         }
                     }
                 }
 
-                // ---------------- right rail: join / privacy ----------------
+                // ---------------- right rail ----------------
                 ColumnLayout {
-                    Layout.preferredWidth: Style.space(190)
+                    Layout.preferredWidth: Style.space(220)
                     Layout.fillHeight: true
-                    spacing: Style.spacing.sm
+                    spacing: Style.spacing.md
 
+                    // you card
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: Style.space(96)
+                        Layout.preferredHeight: Style.space(128)
                         color: Color.popups.background
                         radius: Style.cornerRadius
                         border.width: 1
-                        border.color: Color.popups.border
+                        border.color: root.onMap ? Color.accent : Color.popups.border
 
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: Style.spacing.sm
-                            spacing: Style.spacing.xs
+                            anchors.margins: Style.spacing.md
+                            spacing: Style.spacing.sm
 
-                            Text {
+                            RowLayout {
                                 Layout.fillWidth: true
-                                text: root.onMap
-                                    ? "\uf058  You are on the map"
-                                    : (root.optedOut
-                                        ? "\uf070  You left the map"
-                                        : "\uf0ac  Joining the map \u2026")
-                                font.family: Style.font.family
-                                font.pixelSize: Style.font.caption
-                                font.bold: true
-                                color: root.onMap ? Color.accent : (root.optedOut ? Color.urgent : Qt.darker(Color.foreground, 1.2))
+                                spacing: Style.spacing.sm
+
+                                Rectangle {
+                                    Layout.preferredWidth: 8
+                                    Layout.preferredHeight: 8
+                                    radius: 4
+                                    color: root.onMap ? Color.accent
+                                        : (root.optedOut ? Color.urgent : root.dim)
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: root.onMap ? "You are on the map"
+                                        : (root.optedOut ? "You left the map" : "Joining \u2026")
+                                    font.family: Style.font.family
+                                    font.pixelSize: Style.font.caption
+                                    font.bold: true
+                                    color: root.onMap ? Color.accent
+                                        : (root.optedOut ? Color.urgent : root.dim)
+                                    elide: Text.ElideRight
+                                }
                             }
                             Text {
                                 Layout.fillWidth: true
-                                text: "Opt-in by default. Only your country is shown (derived from your IP "
-                                    + "server-side) \u2014 no IP, no precise location, no name. Leave anytime."
+                                text: "Country is derived from your IP server-side \u2014 no IP, "
+                                    + "no precise location, no name. Opt-in by default; leave anytime."
                                 font.family: Style.font.family
                                 font.pixelSize: Style.font.caption
-                                color: Qt.darker(Color.foreground, 1.3)
+                                color: root.dim
                                 wrapMode: Text.WordWrap
                             }
                             Item { Layout.fillHeight: true }
@@ -490,6 +493,76 @@ Panel {
                             }
                         }
                     }
+
+                    // top countries
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        spacing: Style.spacing.xs
+                        visible: root.countries.length > 0
+
+                        PanelSectionHeader {
+                            Layout.fillWidth: true
+                            text: "Top countries"
+                        }
+
+                        Item { Layout.fillHeight: true }
+
+                        Repeater {
+                            model: {
+                                var top = [];
+                                var n = Math.min(8, root.countries.length);
+                                for (var i = 0; i < n; i++) top.push(root.countries[i]);
+                                return top;
+                            }
+                            delegate: ColumnLayout {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                spacing: Style.spacing.xxs
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: Style.spacing.sm
+
+                                    Text {
+                                        text: root.flagEmoji(modelData.code)
+                                        font.pixelSize: Style.font.body
+                                        Layout.preferredWidth: Style.space(20)
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: modelData.code
+                                        font.family: Style.font.family
+                                        font.pixelSize: Style.font.caption
+                                        font.bold: true
+                                        color: Color.foreground
+                                        elide: Text.ElideRight
+                                    }
+                                    Text {
+                                        text: root.fmt(modelData.count)
+                                        font.family: Style.font.family
+                                        font.pixelSize: Style.font.caption
+                                        color: root.dim
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 3
+                                    radius: 2
+                                    color: Qt.darker(Color.popups.background, 1.1)
+
+                                    Rectangle {
+                                        width: parent.width * Math.min(1, modelData.count / Math.max(1, root.maxCount))
+                                        height: parent.height
+                                        radius: 2
+                                        color: Color.accent
+                                        opacity: 0.85
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -503,14 +576,14 @@ Panel {
                 Text {
                     Layout.fillWidth: true
                     text: "device hash (sha256 of machine-id) \u00b7 country from IP \u00b7 "
-                        + "records expire after 12 months \u00b7 rates limited"
+                        + "records expire after 12 months \u00b7 rate limited"
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     color: Qt.darker(Color.foreground, 1.35)
                     elide: Text.ElideRight
                 }
                 Text {
-                    text: root.dots.length + " countries"
+                    text: "updated " + root.formatUpdated(root.updatedAt)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
                     color: Qt.darker(Color.foreground, 1.35)

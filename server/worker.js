@@ -18,7 +18,7 @@ import { COUNTRY } from "./countries.js";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const ACTIVE_WINDOW_MS = 30 * DAY_MS;
 const RECORD_TTL_SECONDS = 365 * 24 * 60 * 60;
-const STATS_CACHE_TTL_SECONDS = 600;
+const STATS_CACHE_TTL_SECONDS = 60;
 const RATE_LIMIT_PER_DAY = 10;
 
 function json(data, status, headers) {
@@ -59,8 +59,12 @@ async function listDevices(env) {
   return out;
 }
 
-async function computeStats(env) {
+async function computeStats(env, extra) {
   const devices = await listDevices(env);
+  // A register just wrote `extra`; KV list is eventually consistent so the
+  // freshly written record may not be visible yet. Inject it so the count
+  // the client receives is never lower than reality.
+  if (extra && !devices.some(d => d.hash === extra.hash)) devices.push(extra);
   const now = Date.now();
   const byCountry = {};
   let active30d = 0;
@@ -75,12 +79,12 @@ async function computeStats(env) {
   return { total: devices.length, active30d, updatedAt: now, countries };
 }
 
-async function cachedStats(env, force) {
+async function cachedStats(env, force, extra) {
   if (!force) {
     const cached = await env.OMAUSER.get("cache:stats", "json");
-    if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.payload;
+    if (cached && Date.now() - cached.at < STATS_CACHE_TTL_SECONDS * 1000) return cached.payload;
   }
-  const stats = await computeStats(env);
+  const stats = await computeStats(env, extra);
   await env.OMAUSER.put("cache:stats", JSON.stringify({ at: Date.now(), payload: stats }), {
     expirationTtl: STATS_CACHE_TTL_SECONDS
   });
@@ -117,7 +121,7 @@ export default {
         rec.appVersion = typeof body.appVersion === "string" ? body.appVersion.slice(0, 32) : "";
         await env.OMAUSER.put(key, JSON.stringify(rec), { expirationTtl: RECORD_TTL_SECONDS });
         await env.OMAUSER.delete("cache:stats");
-        const stats = await cachedStats(env, true);
+        const stats = await cachedStats(env, true, rec);
         return json({ ok: true, stats }, 200, headers);
       }
 

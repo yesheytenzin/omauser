@@ -33,10 +33,10 @@ for feat in gj["features"]:
             paths += rings_to_paths(poly)
 
 body = "\n".join(f'<path d="{d}"/>' for d in paths)
-# Transparent ocean (panel background shows through), light land with a
-# soft border so the shapes read on both dark and light themes.
+# Deep blue ocean + lighter land so the map reads on dark panels.
 svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">
-<g fill="#7a8aa0" fill-opacity="0.55" stroke="#4a5a70" stroke-opacity="0.8" stroke-width="1">{body}</g>
+<rect width="{W}" height="{H}" fill="#0d1626"/>
+<g fill="#3e5068" fill-opacity="0.9" stroke="#2b3a52" stroke-opacity="0.9" stroke-width="1">{body}</g>
 </svg>'''
 open(OUT, "w").write(svg)
 print(f"wrote {OUT}: {len(paths)} paths")
