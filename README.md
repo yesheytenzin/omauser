@@ -54,7 +54,7 @@ Point the plugin at your worker (defaults are baked at setup time):
 ```bash
 omarchy-shell shell call tenzin.omauser refresh   # after editing config:
 # or re-run setup with the URL:
-bash ~/.cache/omauser/omauser-setup.sh https://omauser.<subdomain>.workers.dev
+bash ~/.cache/omauser/omauser-setup.sh https://omauser.yesheytenzin09.workers.dev
 ```
 
 The worker code is public (like every plugin) — the only abuse defenses

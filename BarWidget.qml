@@ -116,6 +116,9 @@ BarWidget {
         function join(): void { root.broadcast("joinMap"); }
         function optOut(): void { root.broadcast("optOut"); }
         function toggle(): void { root.broadcast("togglePanel"); }
+        function refreshMap(): void {
+            if (panelLoader.item && panelLoader.item.fetchMap) panelLoader.item.fetchMap();
+        }
         function status(): string {
             return JSON.stringify({
                 bridgeReady: root.bridgeReady,

@@ -17,7 +17,7 @@ VERSION_FILE="$RUNTIME/version"
 
 # The public Cloudflare Worker URL. Replace with your deployed worker, or
 # pass it as the first argument / OMAUSER_API_URL env var.
-DEFAULT_API_URL="${OMAUSER_API_URL:-https://omauser.YOUR_SUBDOMAIN.workers.dev}"
+DEFAULT_API_URL="${OMAUSER_API_URL:-https://omauser.yesheytenzin09.workers.dev}"
 API_URL="${1:-$DEFAULT_API_URL}"
 
 say()  { printf '\033[1;36m[omauser]\033[0m %s\n' "$*"; }
