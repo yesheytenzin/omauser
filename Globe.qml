@@ -24,6 +24,9 @@ Item {
     property var preparedCountries: []
     property var preparedDots: []
     property string myCountryCode: ""
+    // The requester's own quantized city cell (from /api/map). -999 = unknown.
+    property real myCellLat: -999
+    property real myCellLon: -999
 
     property real zoom: 1.0
     property real panX: 0.0
@@ -199,7 +202,12 @@ Item {
         for (var d = 0; d < preparedDots.length; d++) {
             var row = preparedDots[d]
             var share = Math.sqrt((Number(row.dot.count) || 0) / maxCount)
-            var mine = String(row.dot.code).toUpperCase() === String(root.myCountryCode).toUpperCase()
+            // Red = the dot at MY city cell (this device). Country match is
+            // required too; when our own geo is unknown, fall back to
+            // highlighting the whole country as before.
+            var byCountry = String(row.dot.code).toUpperCase() === String(root.myCountryCode).toUpperCase()
+            var cellMatch = Math.abs(row.lat - root.myCellLat) < 0.001 && Math.abs(row.lon - root.myCellLon) < 0.001
+            var mine = byCountry && (root.myCellLat === -999 ? true : cellMatch)
             var base = mine ? root.myColor : root.otherColor
             var radius = 1.6 + share * 1.8
             if (mine) radius += 1.2
@@ -270,6 +278,8 @@ Item {
     onHoveredDotChanged: canvas.requestPaint()
     // Recolor without waiting for any other repaint trigger
     onMyCountryCodeChanged: canvas.requestPaint()
+    onMyCellLatChanged: canvas.requestPaint()
+    onMyCellLonChanged: canvas.requestPaint()
 
     Canvas {
         id: canvas

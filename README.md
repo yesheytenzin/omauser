@@ -23,9 +23,14 @@ This is the whole contract — the server cannot learn more:
 | Omarchy version                                 | approx city (~11 km grid) from CF IP geo   | precise location, name, hostname            |
 | plugin version                                  | totals per country/city                    | raw `machine-id`                            |
 
-- The client never sends coordinates; the server derives country and a
+- The client never sends coordinates; the server derives country and an
   **~11 km-quantized** location from the connecting IP via Cloudflare's geo
-  and discards the IP. Raw points are never stored — only the rounded cell.
+  and discards the IP. Your salt lives in `~/.local/state/omauser/` (not the
+  cache), so reinstalls/wipes keep the same identity — one device can never
+  create duplicate records.
+- **Your red dot = your city cell**, not your whole country; other installs
+  (even in-country) render blue. Records unseen for 120 days are pruned
+  nightly, so `total` tracks recently-alive installs. Raw points are never stored — only the rounded cell.
 - The `deviceHash` is **double-hashed with a per-device random salt**
   (`bridge.sh:device_hash`), so the `device:<hash>` key in KV is opaque —
   even with a KV dump the admin cannot reverse it to `machine-id` without

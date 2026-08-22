@@ -17,6 +17,8 @@ Panel {
     readonly property string mapFile: runtime + "/map.json"
 
     property var dots: []
+    property real myCellLat: -999
+    property real myCellLon: -999
     property int total: 0
     property int active30d: 0
     property int updatedAt: 0
@@ -59,6 +61,8 @@ Panel {
         total = Number(data.total || 0)
         active30d = Number(data.active30d || 0)
         updatedAt = Number(data.updatedAt || 0)
+        myCellLat = (data.myCell === null || data.myCell === undefined) ? -999 : Number(data.myCell.lat)
+        myCellLon = (data.myCell === null || data.myCell === undefined) ? -999 : Number(data.myCell.lon)
         loaded = true
         errorText = ""
     }
@@ -152,6 +156,8 @@ Panel {
                     anchors.fill: parent
                     dots: root.dots
                     myCountryCode: root.hostWidget && root.hostWidget.myCountry ? root.hostWidget.myCountry : ""
+                    myCellLat: root.myCellLat
+                    myCellLon: root.myCellLon
                     backgroundColor: Color.popups.background
                     landColor: Qt.darker(Color.foreground, 2.7)
                     gridColor: Color.foreground

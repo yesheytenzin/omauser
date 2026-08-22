@@ -17,6 +17,10 @@
 set -euo pipefail
 
 RUNTIME="${OMAUSER_RUNTIME:-${XDG_CACHE_HOME:-$HOME/.cache}/omauser}"
+# Identity material lives in XDG_STATE (survives cache wipes/reinstalls) so
+# the same machine keeps the same salted hash and never creates duplicates.
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omauser"
+mkdir -p "$STATE_DIR"
 STATE="$RUNTIME/state.json"
 CONFIG="$RUNTIME/config.json"
 STATS_CACHE="$RUNTIME/stats.json"
@@ -44,7 +48,7 @@ device_hash() {
   local id=""
   [[ -r /etc/machine-id ]] && id="$(tr -d '\n' < /etc/machine-id)"
   if [[ -z "$id" ]]; then
-    local seed="$RUNTIME/device-seed"
+    local seed="$STATE_DIR/device-seed"
     if [[ -f "$seed" ]]; then id="$(cat "$seed")"
     else {
       id="$(openssl rand -hex 16 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || echo "$HOSTNAME-$(date +%s%N)")"
@@ -54,11 +58,14 @@ device_hash() {
   fi
   local raw_hash
   raw_hash="$(printf '%s' "$id" | sha256sum | awk '{ print $1 }')"
-  # Encrypt so even server admin cannot reverse to machine-id:
-  # per-device salt stored locally, never sent. Server only sees HMAC(salt, hash).
-  local salt_file="$RUNTIME/device-salt"
+  # Per-device salt stored in the persistent state dir, never sent. Migrate
+  # from the old cache location so reinstalls keep the same identity.
+  local salt_file="$STATE_DIR/device-salt"
+  if [[ ! -s "$salt_file" && -s "$RUNTIME/device-salt" ]]; then
+    mv "$RUNTIME/device-salt" "$salt_file"; chmod 600 "$salt_file"
+  fi
   local salt=""
-  if [[ -f "$salt_file" ]]; then salt="$(cat "$salt_file")"
+  if [[ -s "$salt_file" ]]; then salt="$(cat "$salt_file")"
   else {
     salt="$(openssl rand -hex 16 2>/dev/null || head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n' 2>/dev/null || echo "omauser-$(date +%s%N)")"
     printf '%s' "$salt" > "$salt_file"; chmod 600 "$salt_file"

@@ -36,6 +36,9 @@ const STATS_CACHE_TTL_SECONDS = 300;
 const RATE_LIMIT_PER_DAY_IP = 100;
 const RATE_LIMIT_PER_DAY_HASH = 60;
 const MAX_BODY_BYTES = 2048;
+// Records unseen for this long are pruned nightly: salt-reset orphans and
+// abandoned installs drop off, so `total` tracks recently-alive installs.
+const PRUNE_AFTER_MS = 120 * DAY_MS;
 
 function json(data, status, headers) {
   return new Response(JSON.stringify(data), {
@@ -325,14 +328,22 @@ export default {
         const stats = await cachedStats(env, force);
         const myCountry = (request.headers.get("cf-ipcountry") || "XX").toUpperCase().slice(0, 2);
         const safeCountry = /^[A-Z]{2}$/.test(myCountry) ? myCountry : "XX";
+        // The requester's own quantized city cell - lets the client mark the
+        // dot that represents THIS device red without sending any identity.
+        const cf = request.cf || {};
+        const mlat = Number(cf.latitude), mlon = Number(cf.longitude);
+        const hasMyGeo = Number.isFinite(mlat) && Number.isFinite(mlon);
+        const myCell = hasMyGeo
+          ? { lat: Math.round(mlat * 10) / 10, lon: Math.round(mlon * 10) / 10 }
+          : null;
         if (path === "/api/stats") {
           const h = Object.assign({}, headers);
           if (force) h["cache-control"] = "no-store";
-          return json(Object.assign({}, stats, { myCountry: safeCountry }), 200, h);
+          return json(Object.assign({}, stats, { myCountry: safeCountry, myCell }), 200, h);
         }
         const h2 = Object.assign({}, headers);
         if (force) h2["cache-control"] = "no-store";
-        return json(Object.assign({}, stats, { dots: stats.dots || [], myCountry: safeCountry }), 200, h2);
+        return json(Object.assign({}, stats, { dots: stats.dots || [], myCountry: safeCountry, myCell }), 200, h2);
       }
 
       return json({ ok: false, error: "not found" }, 404, headers);
@@ -343,7 +354,24 @@ export default {
   },
 
   async scheduled(event, env) {
-    // Warm the shared cache once a day; scans are otherwise on-demand.
+    // Nightly housekeeping: prune installs unseen beyond the retention
+    // window (salt-reset orphans, abandoned machines), then warm the cache.
+    try {
+      const cutoff = Date.now() - PRUNE_AFTER_MS;
+      let cursor;
+      do {
+        const page = await env.OMAUSER.list({ prefix: "device:", cursor, limit: 1000 });
+        const names = page.keys.map(k => k.name);
+        const recs = await Promise.all(names.map(n => env.OMAUSER.get(n, "json")));
+        for (let i = 0; i < recs.length; i++) {
+          if (recs[i] && (recs[i].lastSeen || 0) < cutoff) await env.OMAUSER.delete(names[i]);
+        }
+        cursor = page.cursor;
+      } while (cursor);
+      if (env.DB) {
+        try { await env.DB.prepare("DELETE FROM devices WHERE lastSeen < ?").bind(cutoff).run(); } catch {}
+      }
+    } catch {}
     try { await cachedStats(env, true); } catch {}
   },
 };
