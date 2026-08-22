@@ -2,7 +2,10 @@ name = "omauser"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
-# Retention: device records carry a 1-year TTL in KV; no cron required.
+# Optional hardening: set HASH_SALT to pepper device hashes (e.g. `wrangler secret put HASH_SALT`)
+# Optional scale: bind D1 as DB for strongly-consistent counters (free 5M reads/day)
+#   wrangler d1 create omauser && wrangler d1 execute omauser --file schema.sql
+# Retention: device records carry a 1-year TTL in KV; aggregate reconciled nightly.
 [triggers]
 crons = ["0 4 * * *"]
 

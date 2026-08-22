@@ -219,21 +219,28 @@ BarWidget {
 
     Timer {
         id: statsTimer
-        interval: 300000
+        // 5min base + jitter ±45s to avoid thundering herd on free tier
+        interval: 300000 + Math.floor(Math.random() * 90000 - 45000)
         repeat: true
         triggeredOnStart: true
         running: root.bridgeReady
-        onTriggered: root.fetchStats()
+        onTriggered: {
+            root.fetchStats()
+            // re-randomize next interval
+            statsTimer.interval = 300000 + Math.floor(Math.random() * 90000 - 45000)
+        }
     }
 
     Timer {
         id: heartbeatTimer
-        interval: 21600000
+        // 23h base + jitter ±1h + initial random delay to spread heartbeats
+        interval: 82800000 + Math.floor(Math.random() * 7200000 - 3600000)
         repeat: true
         running: root.bridgeReady && !root.optedOut
         onTriggered: {
             heartbeatProc.command = ["bash", root.bridge, "heartbeat"];
-            heartbeatProc.running = true;
+            heartbeatProc.running = true
+            heartbeatTimer.interval = 82800000 + Math.floor(Math.random() * 7200000 - 3600000)
         }
     }
 

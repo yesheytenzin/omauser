@@ -59,21 +59,28 @@ post_register() {
   payload="$(jq -cn --arg h "$hash" --arg v "$(omarchy_version)" --arg a "$VERSION" \
     '{ deviceHash: $h, omarchyVersion: $v, appVersion: $a }')"
   local out
-  if out="$(curl -sS --fail --max-time 15 -H 'content-type: application/json' \
-      -d "$payload" "$API_URL/api/register")"; then
-    local total active
-    total="$(jq -er '.stats.total // 0' <<<"$out")"
-    active="$(jq -er '.stats.active30d // 0' <<<"$out")"
-    write_state --arg h "$hash" --argjson t "$total" --argjson a "$active" \
-      '.deviceHash = $h | .registered = true | .lastHeartbeat = (now * 1000 | floor) | .lastTotal = $t | .lastActive = $a'
-    if [[ -f "$STATS_CACHE" ]]; then
-      jq --argjson t "$total" --argjson a "$active" \
-        '.total = $t | .active30d = $a | .updatedAt = (now * 1000 | floor)' "$STATS_CACHE" \
-        > "$STATS_CACHE.tmp" && mv "$STATS_CACHE.tmp" "$STATS_CACHE"
+  # Retry with exponential backoff for free-tier 429/5xx
+  local attempt=0 delay=1
+  while [[ $attempt -lt 3 ]]; do
+    if out="$(curl -sS --fail --max-time 15 -H 'content-type: application/json' \
+        -d "$payload" "$API_URL/api/register" 2>&1)"; then
+      local total active
+      total="$(jq -er '.stats.total // 0' <<<"$out" 2>/dev/null || echo 0)"
+      active="$(jq -er '.stats.active30d // 0' <<<"$out" 2>/dev/null || echo 0)"
+      write_state --arg h "$hash" --argjson t "$total" --argjson a "$active" \
+        '.deviceHash = $h | .registered = true | .lastHeartbeat = (now * 1000 | floor) | .lastTotal = $t | .lastActive = $a'
+      if [[ -f "$STATS_CACHE" ]]; then
+        jq --argjson t "$total" --argjson a "$active" \
+          '.total = $t | .active30d = $a | .updatedAt = (now * 1000 | floor)' "$STATS_CACHE" \
+          > "$STATS_CACHE.tmp" && mv "$STATS_CACHE.tmp" "$STATS_CACHE"
+      fi
+      say "registered (total $total, active $active)"
+      return 0
     fi
-    say "registered (total $total, active $active)"
-    return 0
-  fi
+    # If 429, respect Retry-After
+    if grep -q "429" <<<"$out"; then delay=5; fi
+    attempt=$((attempt+1)); [[ $attempt -lt 3 ]] && sleep $delay && delay=$((delay*2))
+  done
   warn "registration failed: API unreachable ($API_URL)"
   return 1
 }
@@ -82,11 +89,15 @@ fetch_json() {
   local endpoint="$1" outfile="$2"
   [[ -n "$API_URL" ]] || { warn "no API URL configured"; return 1; }
   local tmp="$outfile.tmp"
-  if curl -sS --fail --max-time 15 "$API_URL/$endpoint" -o "$tmp"; then
-    mv "$tmp" "$outfile"
-    say "$endpoint -> $outfile"
-    return 0
-  fi
+  local attempt=0 delay=1
+  while [[ $attempt -lt 2 ]]; do
+    if curl -sS --fail --max-time 15 "$API_URL/$endpoint" -o "$tmp"; then
+      mv "$tmp" "$outfile"
+      say "$endpoint -> $outfile"
+      return 0
+    fi
+    attempt=$((attempt+1)); [[ $attempt -lt 2 ]] && sleep $delay
+  done
   rm -f "$tmp"
   warn "$endpoint fetch failed - showing last cached data"
   return 1
