@@ -29,15 +29,17 @@ Panel {
 
     function fmt(value) { return Number(value || 0).toLocaleString() }
 
-    function fetchMap() {
+    function fetchMap(force) {
         if (mapProc.running) return
-        // Fast read: show cached map instantly, then refresh in background
-        if (!loading) readMapCache()
+        // Fast read: show cached map instantly for normal refresh;
+        // for join/leave (force) keep optimistic data and skip stale cache
+        if (!force && !loading) readMapCache()
         loading = true
         offline = false
+        mapProc.command = ["bash", root.bridge, force ? "map-force" : "map"]
         mapProc.running = true
-        // Also refresh bar counts in parallel for fast UI
-        if (hostWidget && hostWidget.fetchStats) hostWidget.fetchStats()
+        // Also refresh bar counts in parallel for fast UI - force bypasses cache
+        if (hostWidget && hostWidget.fetchStats) hostWidget.fetchStats(force ? true : false)
     }
 
     function readMapCache() {
@@ -63,13 +65,45 @@ Panel {
     }
 
     function joinMap() {
+        // Optimistic: show correct count instantly, then sync with server
+        if (!onMap) {
+            total = total + 1
+            active30d = active30d + 1
+            var code = hostWidget && hostWidget.myCountry ? String(hostWidget.myCountry).toUpperCase() : ""
+            if (code) {
+                var found = false
+                for (var i = 0; i < dots.length; i++) {
+                    if (String(dots[i].code).toUpperCase() === code) {
+                        var nd = dots.slice(); nd[i] = Object.assign({}, nd[i], {count: (Number(nd[i].count)||0)+1}); dots = nd; found = true; break
+                    }
+                }
+                if (!found) {
+                    dots = dots.concat([{code: code, name: code, count: 1, lat: 0, lon: 0}])
+                }
+            }
+        }
         if (hostWidget && hostWidget.joinMap) hostWidget.joinMap()
-        Qt.callLater(fetchMap)
+        fetchMap(true)
     }
 
     function optOut() {
+        // Optimistic: decrement instantly if on map
+        if (onMap) {
+            if (total > 0) total = total - 1
+            if (active30d > 0) active30d = active30d - 1
+            var code2 = hostWidget && hostWidget.myCountry ? String(hostWidget.myCountry).toUpperCase() : ""
+            if (code2) {
+                for (var j = 0; j < dots.length; j++) {
+                    if (String(dots[j].code).toUpperCase() === code2) {
+                        if ((Number(dots[j].count)||0) <= 1) { var nd2 = dots.slice(); nd2.splice(j,1); dots = nd2 }
+                        else { var nd3 = dots.slice(); nd3[j] = Object.assign({}, nd3[j], {count: nd3[j].count-1}); dots = nd3 }
+                        break
+                    }
+                }
+            }
+        }
         if (hostWidget && hostWidget.optOut) hostWidget.optOut()
-        Qt.callLater(fetchMap)
+        fetchMap(true)
     }
 
     Process {
@@ -191,7 +225,7 @@ Panel {
                         text: "refresh"
                         fontSize: Style.font.caption
                         foreground: Color.foreground
-                        onClicked: root.fetchMap()
+                        onClicked: root.fetchMap(true)
                     }
                     Button {
                         text: root.onMap ? "leave" : "join"

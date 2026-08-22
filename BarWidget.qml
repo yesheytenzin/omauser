@@ -62,21 +62,28 @@ BarWidget {
         if (!statsCacheProc.running) statsCacheProc.running = true;
     }
 
-    function fetchStats() {
+    function fetchStats(force) {
         if (!root.bridgeReady) return;
-        if (!statsProc.running) statsProc.running = true;
+        if (statsProc.running) return;
+        statsProc.command = ["bash", root.bridge, force ? "stats-force" : "stats"];
+        statsProc.running = true;
     }
 
     function joinMap() {
         if (!root.bridgeReady) return;
+        if (!root.registered) { root.total = root.total + 1; root.active30d = root.active30d + 1 }
         root.optedOut = false;
+        root.registered = true
         registerProc.command = ["bash", root.bridge, "join"];
         registerProc.running = true;
     }
 
     function optOut() {
         if (!root.bridgeReady) return;
+        if (root.registered && root.total > 0) root.total = root.total - 1
+        if (root.registered && root.active30d > 0) root.active30d = root.active30d - 1
         root.optedOut = true;
+        root.registered = false
         registerProc.command = ["bash", root.bridge, "opt-out"];
         registerProc.running = true;
     }

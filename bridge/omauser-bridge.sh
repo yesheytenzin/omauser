@@ -173,7 +173,9 @@ case "${1:-}" in
   heartbeat)   cmd_heartbeat ;;
   stats)       fetch_json "api/stats" "$STATS_CACHE" ;;
   map)         fetch_json "api/map" "$MAP_CACHE" ;;
+  map-force)   fetch_json "api/map?force=1" "$MAP_CACHE" ;;
+  stats-force) fetch_json "api/stats?force=1" "$STATS_CACHE" ;;
   *)
-    fail "unknown command: ${1:-<none>} (use status|register|opt-out|join|heartbeat|stats|map|device-hash)"
+    fail "unknown command: ${1:-<none>} (use status|register|opt-out|join|heartbeat|stats|map|map-force|stats-force|device-hash)"
     ;;
 esac

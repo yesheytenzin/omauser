@@ -268,10 +268,15 @@ export default {
       }
 
       if (request.method === "GET" && (path === "/api/stats" || path === "/api/map")) {
-        const stats = await cachedStats(env, false);
+        const force = url.searchParams.get("force") === "1" || url.searchParams.get("nocache") === "1";
+        const stats = await cachedStats(env, force);
         const myCountry = (request.headers.get("cf-ipcountry") || "XX").toUpperCase().slice(0, 2);
         const safeCountry = /^[A-Z]{2}$/.test(myCountry) ? myCountry : "XX";
-        if (path === "/api/stats") return json(Object.assign({}, stats, { myCountry: safeCountry }), 200, headers);
+        if (path === "/api/stats") {
+          const h = Object.assign({}, headers);
+          if (force) h["cache-control"] = "no-store";
+          return json(Object.assign({}, stats, { myCountry: safeCountry }), 200, h);
+        }
         const dots = stats.countries
           .filter(c => COUNTRY[c.code])
           .map(c => ({
@@ -281,7 +286,9 @@ export default {
             lat: COUNTRY[c.code][1],
             lon: COUNTRY[c.code][2]
           }));
-        return json(Object.assign({}, stats, { dots, myCountry: safeCountry }), 200, headers);
+        const h2 = Object.assign({}, headers);
+        if (force) h2["cache-control"] = "no-store";
+        return json(Object.assign({}, stats, { dots, myCountry: safeCountry }), 200, h2);
       }
 
       return json({ ok: false, error: "not found" }, 404, headers);
