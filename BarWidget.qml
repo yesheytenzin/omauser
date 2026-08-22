@@ -220,7 +220,10 @@ BarWidget {
         onExited: function(exitCode) {
             registerProc.out = "";
             root.refreshState();
-            if (!root.optedOut) root.fetchStats();
+            // Force-refresh after join/leave so the bar count comes from a
+            // full scan (truth) instead of the 5m cache, which may briefly
+            // predate the registration write.
+            if (!root.optedOut) root.fetchStats(true); else root.fetchStats(true);
         }
     }
 
