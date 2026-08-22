@@ -132,6 +132,7 @@ Panel {
         open: root.opened
         centerOnBar: true
         padding: 0
+        focusTarget: keyCatcher
         // Outside-click dismissal calls close(); route it through the
         // controller so panelController.open resets and the panel can be
         // reopened. A direct `open = false` would break the open:opened
@@ -141,76 +142,83 @@ Panel {
         contentWidth: panel.fittedContentWidth(Math.min(panel.screenW * 0.605, panel.screenH * 1.331))
         contentHeight: panel.fittedContentHeight(Math.min(panel.screenW * 0.3872, panel.screenH * 0.7744))
 
-        Item {
+        PanelKeyCatcher {
+            id: keyCatcher
             anchors.fill: parent
-            Globe {
-                id: globe
-                anchors.fill: parent
-                dots: root.dots
-                myCountryCode: root.hostWidget && root.hostWidget.myCountry ? root.hostWidget.myCountry : ""
-                activeCountryCode: root.hostWidget && root.hostWidget.myCountry ? root.hostWidget.myCountry : ""
-                backgroundColor: Color.popups.background
-                landColor: Qt.darker(Color.foreground, 2.7)
-                gridColor: Color.foreground
-                outlineColor: Color.foreground
-                dotColor: Color.accent
-                textColor: Color.foreground
-            }
+            onCloseRequested: root.close()
 
-            RowLayout {
-                id: hud
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.right: parent.right
-                anchors.margins: Style.space(14)
-                spacing: Style.spacing.sm
+            Item {
+                anchors.fill: parent
+
+                Globe {
+                    id: globe
+                    anchors.fill: parent
+                    dots: root.dots
+                    myCountryCode: root.hostWidget && root.hostWidget.myCountry ? root.hostWidget.myCountry : ""
+                    activeCountryCode: root.hostWidget && root.hostWidget.myCountry ? root.hostWidget.myCountry : ""
+                    backgroundColor: Color.popups.background
+                    landColor: Qt.darker(Color.foreground, 2.7)
+                    gridColor: Color.foreground
+                    outlineColor: Color.foreground
+                    dotColor: Color.accent
+                    textColor: Color.foreground
+                }
+
+                RowLayout {
+                    id: hud
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.margins: Style.space(14)
+                    spacing: Style.spacing.sm
+
+                    Text {
+                        text: root.fmt(root.total) + " users  /  " + root.fmt(root.active30d) + " active"
+                        font.family: Style.font.family
+                        font.pixelSize: Style.font.caption
+                        color: Color.foreground
+                        style: Text.Outline
+                        styleColor: Qt.darker(Color.popups.background, 1.5)
+                    }
+                    Item { Layout.fillWidth: true }
+                    Button {
+                        text: "refresh"
+                        fontSize: Style.font.caption
+                        foreground: Color.foreground
+                        onClicked: root.fetchMap()
+                    }
+                    Button {
+                        text: root.onMap ? "leave" : "join"
+                        fontSize: Style.font.caption
+                        foreground: Color.foreground
+                        accent: Color.accent
+                        bordered: true
+                        onClicked: root.onMap ? root.optOut() : root.joinMap()
+                    }
+                }
 
                 Text {
-                    text: root.fmt(root.total) + " users  /  " + root.fmt(root.active30d) + " active"
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: Style.space(12)
+                    text: "drag to pan  -  scroll to zoom  -  double-click to reset"
                     font.family: Style.font.family
                     font.pixelSize: Style.font.caption
+                    color: Qt.darker(Color.foreground, 1.35)
+                    style: Text.Outline
+                    styleColor: Qt.darker(Color.popups.background, 1.5)
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    visible: root.loading
+                    text: "loading user globe ..."
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.body
                     color: Color.foreground
                     style: Text.Outline
                     styleColor: Qt.darker(Color.popups.background, 1.5)
                 }
-                Item { Layout.fillWidth: true }
-                Button {
-                    text: "refresh"
-                    fontSize: Style.font.caption
-                    foreground: Color.foreground
-                    onClicked: root.fetchMap()
-                }
-                Button {
-                    text: root.onMap ? "leave" : "join"
-                    fontSize: Style.font.caption
-                    foreground: Color.foreground
-                    accent: Color.accent
-                    bordered: true
-                    onClicked: root.onMap ? root.optOut() : root.joinMap()
-                }
-            }
-
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: Style.space(12)
-                text: "drag to pan  -  scroll to zoom  -  double-click to reset"
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                color: Qt.darker(Color.foreground, 1.35)
-                style: Text.Outline
-                styleColor: Qt.darker(Color.popups.background, 1.5)
-            }
-
-            Text {
-                anchors.centerIn: parent
-                visible: root.loading
-                text: "loading user globe ..."
-                font.family: Style.font.family
-                font.pixelSize: Style.font.body
-                color: Color.foreground
-                style: Text.Outline
-                styleColor: Qt.darker(Color.popups.background, 1.5)
             }
         }
     }

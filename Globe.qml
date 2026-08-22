@@ -65,20 +65,17 @@ Item {
 
     function clampPan() {
         var W = root.mapWidth, H = root.mapHeight
+        var maxX = Math.max(0, (W * root.zoom - canvas.width) / 2)
         var maxY = Math.max(0, (H * root.zoom - canvas.height) / 2)
-        if (W > 0) {
-            var half = W / 2, v = root.panX % W
-            if (v > half) v -= W
-            else if (v < -half) v += W
-            root.panX = v
-        }
+        root.panX = clamp(root.panX, -maxX, maxX)
         root.panY = clamp(root.panY, -maxY, maxY)
     }
 
     function zoomAt(factor, mx, my) {
+        var cx = canvas.width / 2, cy = canvas.height / 2
+        if (!isFinite(mx) || !isFinite(my)) { mx = cx; my = cy }
         var newZoom = clamp(root.zoom * factor, 1, root.maxZoom)
         if (newZoom === root.zoom) return
-        var cx = canvas.width / 2, cy = canvas.height / 2
         var k = newZoom / root.zoom
         root.panX = (mx - cx) - k * ((mx - cx) - root.panX)
         root.panY = (my - cy) - k * ((my - cy) - root.panY)
@@ -284,10 +281,6 @@ Item {
             var factor = pinch.scale / lastScale
             root.zoomAt(factor, pinch.center.x, pinch.center.y)
             lastScale = pinch.scale
-            var dx = pinch.center.x - lastCx, dy = pinch.center.y - lastCy
-            root.panX += dx; root.panY += dy
-            clampPan()
-            canvas.requestPaint()
             lastCx = pinch.center.x; lastCy = pinch.center.y
             root.hoveredDot = root.dotAt(pinch.center.x, pinch.center.y)
         }
@@ -324,9 +317,22 @@ Item {
             onCanceled: dragging = false
             onExited: { root.hoveredDot = null; dragging = false }
             onWheel: function(event) {
-                var factor = event.angleDelta.y > 0 ? 1.1 : 1 / 1.1
-                zoomAt(factor, event.x, event.y)
-                root.hoveredDot = root.dotAt(event.x, event.y)
+                // Use the actual cursor position (ma tracks hover). event.x/position
+                // can be stale or reported as canvas center in some Qt builds,
+                // which caused zoom to always anchor at Africa (0,0).
+                var mx = ma.mouseX
+                var my = ma.mouseY
+                // Also fallback to event position if ma not yet updated
+                if (!isFinite(mx) || !isFinite(my)) {
+                    mx = event.position !== undefined && event.position.x !== undefined ? event.position.x : event.x
+                    my = event.position !== undefined && event.position.y !== undefined ? event.position.y : event.y
+                }
+                if (!isFinite(mx) || !isFinite(my)) { mx = canvas.width/2; my = canvas.height/2 }
+                var dy = event.pixelDelta && event.pixelDelta.y !== 0 ? event.pixelDelta.y : event.angleDelta.y
+                var factor = dy > 0 ? 1.08 : 1 / 1.08
+                zoomAt(factor, mx, my)
+                root.hoveredDot = root.dotAt(mx, my)
+                event.accepted = true
             }
             onDoubleClicked: root.resetView()
         }
