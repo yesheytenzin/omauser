@@ -28,9 +28,10 @@ Item {
     property real zoom: 1.0
     property real panX: 0.0
     property real panY: 0.0
+    property bool pinching: false
     readonly property real maxZoom: 8.0
 
-    readonly property real mapWidth: Math.min(canvas.width, canvas.height * 2)
+    readonly property real mapWidth: Math.max(canvas.width, canvas.height * 2)
     readonly property real mapHeight: mapWidth / 2
     readonly property real mapLeft: (canvas.width - mapWidth) / 2
     readonly property real mapTop: (canvas.height - mapHeight) / 2
@@ -265,40 +266,70 @@ Item {
         onPaint: { var ctx = getContext("2d"); if (ctx) root.drawMap(ctx) }
     }
 
-    MouseArea {
+    PinchArea {
+        id: pinchArea
         anchors.fill: parent
-        hoverEnabled: true
-        acceptedButtons: Qt.LeftButton
-        property real lastX: 0
-        property real lastY: 0
-        property bool dragging: false
-        property real moved: 0
+        property real lastScale: 1.0
+        property real lastCx: 0
+        property real lastCy: 0
 
-        onPressed: function(event) {
-            lastX = event.x; lastY = event.y; dragging = true; moved = 0
+        onPinchStarted: function(event) {
+            root.pinching = true
+            if (ma) ma.dragging = false
+            lastScale = pinch.scale
+            lastCx = pinch.center.x
+            lastCy = pinch.center.y
         }
-        onPositionChanged: function(event) {
-            if (dragging) {
-                var dx = event.x - lastX, dy = event.y - lastY
-                lastX = event.x; lastY = event.y
-                moved += Math.abs(dx) + Math.abs(dy)
-                root.panX += dx; root.panY += dy
-                clampPan()
-                canvas.requestPaint()
+        onPinchUpdated: function(event) {
+            var factor = pinch.scale / lastScale
+            root.zoomAt(factor, pinch.center.x, pinch.center.y)
+            lastScale = pinch.scale
+            var dx = pinch.center.x - lastCx, dy = pinch.center.y - lastCy
+            root.panX += dx; root.panY += dy
+            clampPan()
+            canvas.requestPaint()
+            lastCx = pinch.center.x; lastCy = pinch.center.y
+            root.hoveredDot = root.dotAt(pinch.center.x, pinch.center.y)
+        }
+        onPinchFinished: function(event) { root.pinching = false }
+
+        MouseArea {
+            id: ma
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.LeftButton
+            property real lastX: 0
+            property real lastY: 0
+            property bool dragging: false
+            property real moved: 0
+
+            onPressed: function(event) {
+                if (root.pinching) return
+                lastX = event.x; lastY = event.y; dragging = true; moved = 0
             }
-            root.hoverX = event.x
-            root.hoverY = event.y
-            root.hoveredDot = root.dotAt(event.x, event.y)
+            onPositionChanged: function(event) {
+                if (dragging && !root.pinching) {
+                    var dx = event.x - lastX, dy = event.y - lastY
+                    lastX = event.x; lastY = event.y
+                    moved += Math.abs(dx) + Math.abs(dy)
+                    root.panX += dx; root.panY += dy
+                    clampPan()
+                    canvas.requestPaint()
+                }
+                root.hoverX = event.x
+                root.hoverY = event.y
+                root.hoveredDot = root.dotAt(event.x, event.y)
+            }
+            onReleased: dragging = false
+            onCanceled: dragging = false
+            onExited: { root.hoveredDot = null; dragging = false }
+            onWheel: function(event) {
+                var factor = event.angleDelta.y > 0 ? 1.1 : 1 / 1.1
+                zoomAt(factor, event.x, event.y)
+                root.hoveredDot = root.dotAt(event.x, event.y)
+            }
+            onDoubleClicked: root.resetView()
         }
-        onReleased: dragging = false
-        onCanceled: dragging = false
-        onExited: { root.hoveredDot = null; dragging = false }
-        onWheel: function(event) {
-            var factor = event.angleDelta.y > 0 ? 1.1 : 1 / 1.1
-            zoomAt(factor, event.x, event.y)
-            root.hoveredDot = root.dotAt(event.x, event.y)
-        }
-        onDoubleClicked: root.resetView()
     }
 
     Rectangle {
