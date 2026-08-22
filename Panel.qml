@@ -184,7 +184,7 @@ Panel {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: Style.space(12)
-                text: "drag to rotate  -  scroll to zoom"
+                text: "drag to pan  -  scroll to zoom  -  double-click to reset"
                 font.family: Style.font.family
                 font.pixelSize: Style.font.caption
                 color: Qt.darker(Color.foreground, 1.35)

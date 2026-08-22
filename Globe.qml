@@ -1,7 +1,7 @@
 import QtQuick
 
-// Fixed equirectangular world map. It intentionally has no pan or zoom:
-// every continent and every country dot remains visible at once.
+// Equirectangular world map with drag-to-pan and wheel-to-zoom.
+// Horizontal panning wraps seamlessly; vertical panning is clamped.
 Item {
     id: root
 
@@ -22,12 +22,19 @@ Item {
     property var preparedCountries: []
     property var preparedDots: []
 
+    property real zoom: 1.0
+    property real panX: 0.0
+    property real panY: 0.0
+    readonly property real maxZoom: 8.0
+
     readonly property real mapWidth: Math.min(canvas.width, canvas.height * 2)
     readonly property real mapHeight: mapWidth / 2
     readonly property real mapLeft: (canvas.width - mapWidth) / 2
     readonly property real mapTop: (canvas.height - mapHeight) / 2
 
     function alpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
+
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)) }
 
     function flag(code) {
         if (!code || String(code).length !== 2) return ""
@@ -36,9 +43,51 @@ Item {
         return String.fromCodePoint(0x1f1e6 + a - 65) + String.fromCodePoint(0x1f1e6 + b - 65)
     }
 
-    function project(lon, lat) {
+    function baseProject(lon, lat) {
         return { x: root.mapLeft + (Number(lon) + 180) / 360 * root.mapWidth,
                  y: root.mapTop + (90 - Number(lat)) / 180 * root.mapHeight }
+    }
+
+    function toScreen(bx, by) {
+        var cx = canvas.width / 2, cy = canvas.height / 2
+        return { x: cx + root.panX + (bx - cx) * root.zoom,
+                 y: cy + root.panY + (by - cy) * root.zoom }
+    }
+
+    function project(lon, lat) {
+        var b = baseProject(lon, lat)
+        return toScreen(b.x, b.y)
+    }
+
+    function clampPan() {
+        var W = root.mapWidth, H = root.mapHeight
+        var maxY = Math.max(0, (H * root.zoom - canvas.height) / 2)
+        if (W > 0) {
+            var half = W / 2, v = root.panX % W
+            if (v > half) v -= W
+            else if (v < -half) v += W
+            root.panX = v
+        }
+        root.panY = clamp(root.panY, -maxY, maxY)
+    }
+
+    function zoomAt(factor, mx, my) {
+        var newZoom = clamp(root.zoom * factor, 1, root.maxZoom)
+        if (newZoom === root.zoom) return
+        var cx = canvas.width / 2, cy = canvas.height / 2
+        var k = newZoom / root.zoom
+        root.panX = (mx - cx) - k * ((mx - cx) - root.panX)
+        root.panY = (my - cy) - k * ((my - cy) - root.panY)
+        root.zoom = newZoom
+        clampPan()
+        canvas.requestPaint()
+    }
+
+    function resetView() {
+        root.zoom = 1.0
+        root.panX = 0.0
+        root.panY = 0.0
+        canvas.requestPaint()
     }
 
     function prepare() {
@@ -54,8 +103,16 @@ Item {
                 var ring = polygons[p] && polygons[p][0]
                 if (!ring) continue
                 var points = []
-                for (var j = 0; j < ring.length; j++) points.push(project(ring[j][0], ring[j][1]))
-                if (points.length > 2) rings.push(points)
+                var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+                for (var j = 0; j < ring.length; j++) {
+                    var pt = baseProject(ring[j][0], ring[j][1])
+                    points.push(pt)
+                    if (pt.x < minX) minX = pt.x
+                    if (pt.x > maxX) maxX = pt.x
+                    if (pt.y < minY) minY = pt.y
+                    if (pt.y > maxY) maxY = pt.y
+                }
+                if (points.length > 2) rings.push({ points: points, bbox: { minX: minX, maxX: maxX, minY: minY, maxY: maxY } })
             }
             if (rings.length) nextCountries.push({
                 code: String(feature.properties && feature.properties.code || "").toUpperCase(),
@@ -67,41 +124,68 @@ Item {
         var nextDots = []
         for (var d = 0; d < root.dots.length; d++) {
             var dot = root.dots[d]
-            var point = project(dot.lon, dot.lat)
+            var point = baseProject(dot.lon, dot.lat)
             nextDots.push({ dot: dot, x: point.x, y: point.y })
         }
         root.preparedDots = nextDots
         canvas.requestPaint()
     }
 
+    function screenBBox(b, off) {
+        var cx = canvas.width / 2, cy = canvas.height / 2
+        var x0 = cx + root.panX + ((b.minX + off) - cx) * root.zoom
+        var x1 = cx + root.panX + ((b.maxX + off) - cx) * root.zoom
+        var y0 = cy + root.panY + (b.minY - cy) * root.zoom
+        var y1 = cy + root.panY + (b.maxY - cy) * root.zoom
+        return { minX: Math.min(x0, x1), maxX: Math.max(x0, x1),
+                 minY: Math.min(y0, y1), maxY: Math.max(y0, y1) }
+    }
+
+    function isVisible(b, off) {
+        var s = screenBBox(b, off)
+        return s.maxX >= -2 && s.minX <= canvas.width + 2 && s.maxY >= -2 && s.minY <= canvas.height + 2
+    }
+
     function drawGrid(ctx) {
         ctx.strokeStyle = alpha(root.gridColor, 0.2)
-        ctx.lineWidth = 1
+        ctx.lineWidth = 1 / root.zoom
+        var W = root.mapWidth, H = root.mapHeight
+        var offsets = [0, -W, W]
         for (var lon = -150; lon <= 180; lon += 30) {
-            var x = project(lon, 0).x
-            ctx.beginPath(); ctx.moveTo(x, root.mapTop); ctx.lineTo(x, root.mapTop + root.mapHeight); ctx.stroke()
+            for (var o = 0; o < offsets.length; o++) {
+                var x = root.mapLeft + (lon + 180) / 360 * W + offsets[o]
+                ctx.beginPath(); ctx.moveTo(x, root.mapTop); ctx.lineTo(x, root.mapTop + H); ctx.stroke()
+            }
         }
         for (var lat = -60; lat <= 60; lat += 30) {
-            var y = project(0, lat).y
-            ctx.beginPath(); ctx.moveTo(root.mapLeft, y); ctx.lineTo(root.mapLeft + root.mapWidth, y); ctx.stroke()
+            var y = root.mapTop + (90 - lat) / 180 * H
+            ctx.beginPath(); ctx.moveTo(root.mapLeft, y); ctx.lineTo(root.mapLeft + W, y); ctx.stroke()
         }
     }
 
     function drawCountries(ctx) {
+        var W = root.mapWidth
+        var offsets = [0, -W, W]
         for (var i = 0; i < preparedCountries.length; i++) {
             var country = preparedCountries[i]
             var active = country.code === String(root.activeCountryCode).toUpperCase()
             ctx.fillStyle = active ? alpha(root.dotColor, 0.3) : alpha(root.landColor, 0.9)
             ctx.strokeStyle = active ? alpha(root.dotColor, 0.95) : alpha(root.borderColor, 0.55)
-            ctx.lineWidth = active ? 1.5 : 0.7
+            ctx.lineWidth = (active ? 1.5 : 0.7) / root.zoom
             for (var r = 0; r < country.rings.length; r++) {
                 var ring = country.rings[r]
-                ctx.beginPath()
-                for (var p = 0; p < ring.length; p++) {
-                    if (p === 0) ctx.moveTo(ring[p].x, ring[p].y)
-                    else ctx.lineTo(ring[p].x, ring[p].y)
+                for (var o = 0; o < offsets.length; o++) {
+                    var off = offsets[o]
+                    if (!isVisible(ring.bbox, off)) continue
+                    ctx.beginPath()
+                    var pts = ring.points
+                    for (var p = 0; p < pts.length; p++) {
+                        var px = pts[p].x + off, py = pts[p].y
+                        if (p === 0) ctx.moveTo(px, py)
+                        else ctx.lineTo(px, py)
+                    }
+                    ctx.closePath(); ctx.fill(); ctx.stroke()
                 }
-                ctx.closePath(); ctx.fill(); ctx.stroke()
             }
         }
     }
@@ -109,17 +193,24 @@ Item {
     function drawDots(ctx) {
         var maxCount = 1
         for (var i = 0; i < preparedDots.length; i++) maxCount = Math.max(maxCount, Number(preparedDots[i].dot.count) || 0)
+        var W = root.mapWidth
+        var offsets = [0, -W, W]
         for (var d = 0; d < preparedDots.length; d++) {
             var row = preparedDots[d]
             var share = Math.sqrt((Number(row.dot.count) || 0) / maxCount)
             var radius = 1.6 + share * 1.8
-            ctx.beginPath(); ctx.arc(row.x, row.y, radius + 2.5, 0, Math.PI * 2)
-            ctx.fillStyle = alpha(root.dotColor, 0.14); ctx.fill()
-            ctx.beginPath(); ctx.arc(row.x, row.y, radius, 0, Math.PI * 2)
-            ctx.fillStyle = root.dotColor; ctx.fill()
-            if (root.hoveredDot && root.hoveredDot.code === row.dot.code) {
-                ctx.beginPath(); ctx.arc(row.x, row.y, radius + 3, 0, Math.PI * 2)
-                ctx.strokeStyle = root.dotColor; ctx.lineWidth = 1.4; ctx.stroke()
+            var isHover = root.hoveredDot && root.hoveredDot.code === row.dot.code
+            for (var o = 0; o < offsets.length; o++) {
+                var s = toScreen(row.x + offsets[o], row.y)
+                if (s.x < -20 || s.x > canvas.width + 20 || s.y < -20 || s.y > canvas.height + 20) continue
+                ctx.beginPath(); ctx.arc(s.x, s.y, radius + 2.5, 0, Math.PI * 2)
+                ctx.fillStyle = alpha(root.dotColor, 0.14); ctx.fill()
+                ctx.beginPath(); ctx.arc(s.x, s.y, radius, 0, Math.PI * 2)
+                ctx.fillStyle = root.dotColor; ctx.fill()
+                if (isHover) {
+                    ctx.beginPath(); ctx.arc(s.x, s.y, radius + 3, 0, Math.PI * 2)
+                    ctx.strokeStyle = root.dotColor; ctx.lineWidth = 1.4; ctx.stroke()
+                }
             }
         }
     }
@@ -128,25 +219,37 @@ Item {
         ctx.reset()
         ctx.fillStyle = root.backgroundColor
         ctx.fillRect(0, 0, canvas.width, canvas.height)
+        ctx.save()
+        var cx = canvas.width / 2, cy = canvas.height / 2
+        ctx.translate(cx + root.panX, cy + root.panY)
+        ctx.scale(root.zoom, root.zoom)
+        ctx.translate(-cx, -cy)
         drawGrid(ctx)
         drawCountries(ctx)
+        ctx.restore()
         drawDots(ctx)
     }
 
     function dotAt(x, y) {
         var nearest = null, distance = 28 * 28
+        var W = root.mapWidth
+        var offsets = [0, -W, W]
         for (var i = 0; i < preparedDots.length; i++) {
             var row = preparedDots[i]
-            var dx = row.x - x, dy = row.y - y, current = dx * dx + dy * dy
-            if (current < distance) { distance = current; nearest = row.dot }
+            for (var o = 0; o < offsets.length; o++) {
+                var s = toScreen(row.x + offsets[o], row.y)
+                var dx = s.x - x, dy = s.y - y, current = dx * dx + dy * dy
+                if (current < distance) { distance = current; nearest = row.dot }
+            }
         }
         return nearest
     }
 
     onCountriesChanged: root.prepare()
     onDotsChanged: root.prepare()
-    onWidthChanged: canvas.requestPaint()
-    onHeightChanged: canvas.requestPaint()
+    onWidthChanged: root.prepare()
+    onHeightChanged: root.prepare()
+    onZoomChanged: clampPan()
     onHoveredDotChanged: canvas.requestPaint()
 
     Canvas {
@@ -159,12 +262,37 @@ Item {
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
+        acceptedButtons: Qt.LeftButton
+        property real lastX: 0
+        property real lastY: 0
+        property bool dragging: false
+        property real moved: 0
+
+        onPressed: function(event) {
+            lastX = event.x; lastY = event.y; dragging = true; moved = 0
+        }
         onPositionChanged: function(event) {
+            if (dragging) {
+                var dx = event.x - lastX, dy = event.y - lastY
+                lastX = event.x; lastY = event.y
+                moved += Math.abs(dx) + Math.abs(dy)
+                root.panX += dx; root.panY += dy
+                clampPan()
+                canvas.requestPaint()
+            }
             root.hoverX = event.x
             root.hoverY = event.y
             root.hoveredDot = root.dotAt(event.x, event.y)
         }
-        onExited: root.hoveredDot = null
+        onReleased: dragging = false
+        onCanceled: dragging = false
+        onExited: { root.hoveredDot = null; dragging = false }
+        onWheel: function(event) {
+            var factor = event.angleDelta.y > 0 ? 1.1 : 1 / 1.1
+            zoomAt(factor, event.x, event.y)
+            root.hoveredDot = root.dotAt(event.x, event.y)
+        }
+        onDoubleClicked: root.resetView()
     }
 
     Rectangle {
