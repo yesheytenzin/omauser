@@ -104,8 +104,14 @@ BarWidget {
 
     function applyStatus(json) {
         if (!json) return;
-        root.optedOut = json.optedOut === true;
-        root.registered = json.registered === true;
+        // While a join/leave is in flight, the optimistic registered/optedOut
+        // values are authoritative - state.json may be stale (slow forget)
+        // and must not resurrect the opposite state mid-operation.
+        const inflight = registerProc.running;
+        if (!inflight) {
+            root.optedOut = json.optedOut === true;
+            root.registered = json.registered === true;
+        }
         if (!root._ignoreNextStatusTotal) {
             if (json.lastTotal !== undefined && json.lastTotal !== null) root.total = json.lastTotal;
             if (json.lastActive !== undefined && json.lastActive !== null) root.active30d = json.lastActive;
@@ -115,7 +121,7 @@ BarWidget {
         root.bridgeReady = true;
         root.installing = false;
         root.readStatsCache();
-        if (root.shouldAutoRegister) {
+        if (!inflight && root.shouldAutoRegister) {
             registerProc.command = ["bash", root.bridge, "register"];
             registerProc.running = true;
         }

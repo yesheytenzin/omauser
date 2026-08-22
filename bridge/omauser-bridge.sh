@@ -149,8 +149,14 @@ cmd_opt_out() {
   local hash
   hash="$(read_state '.deviceHash')"
   if [[ -n "$hash" && -n "$API_URL" ]]; then
-    curl -sS --fail --max-time 15 -H 'content-type: application/json' \
-      -d "{\"deviceHash\":\"$hash\"}" "$API_URL/api/forget" >/dev/null 2>&1 || true
+    # Retry so a transient failure cannot silently leave the device on the map.
+    local ok=0 attempt=0 delay=1
+    while [[ $attempt -lt 3 ]]; do
+      if curl -sS --fail --max-time 15 -H 'content-type: application/json' \
+        -d "{\"deviceHash\":\"$hash\"}" "$API_URL/api/forget" >/dev/null 2>&1; then ok=1; break; fi
+      attempt=$((attempt+1)); [[ $attempt -lt 3 ]] && sleep $delay && delay=$((delay*2))
+    done
+    [[ $ok -eq 1 ]] || warn "forget failed after retries - device may still appear; try leave again"
   fi
   exec 9>"$LOCK"
   flock 9
