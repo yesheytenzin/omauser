@@ -103,7 +103,11 @@ Panel {
         onTriggered: root.fetchMap()
     }
 
-    function openFromHotkey() { root.controller.show(); root.fetchMap() }
+    function openFromHotkey() {
+        root.controller.open = false
+        root.controller.open = true
+        root.fetchMap()
+    }
     function close() { root.controller.hide() }
     function toggle() { root.opened ? root.close() : root.openFromHotkey() }
     function closeForPopoutSwitch() { root.close() }
@@ -128,6 +132,11 @@ Panel {
         open: root.opened
         centerOnBar: true
         padding: 0
+        // Outside-click dismissal calls close(); route it through the
+        // controller so panelController.open resets and the panel can be
+        // reopened. A direct `open = false` would break the open:opened
+        // binding and leave the panel impossible to reopen.
+        function close() { root.controller.hide() }
         // Keep the equirectangular map at its native 2:1 aspect ratio.
         contentWidth: panel.fittedContentWidth(Math.min(panel.screenW * 0.605, panel.screenH * 1.331))
         contentHeight: panel.fittedContentHeight(Math.min(panel.screenW * 0.3872, panel.screenH * 0.7744))
