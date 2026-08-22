@@ -71,14 +71,31 @@ async function rateLimit(env, ip, hash) {
   return true;
 }
 
-function storageKey(env, hash) {
-  // Pepper the hash if HASH_SALT is set, so KV key is not directly the client hash.
-  // Keeps existing keys readable: we store under device:<hash> but also support peppered lookup.
+async function sha256Hex(s) {
+  const data = new TextEncoder().encode(s);
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+async function storageKey(env, hash) {
   const salt = env.HASH_SALT || "";
   if (!salt) return `device:${hash}`;
-  // Simple pepper: sha256(salt + hash) would require SubtleCrypto; keep prefix for now and hash on read.
-  // We store under peppered key to avoid linkability if KV leaks.
-  return `device:${hash}`; // pepper applied at read/write comparison below if needed
+  const peppered = await sha256Hex(salt + hash);
+  return `device:${peppered}`;
+}
+async function countryHash(env, code) {
+  const salt = env.HASH_SALT || "";
+  if (!salt) return code;
+  return (await sha256Hex(salt + code)).slice(0, 8); // store truncated hash, not plaintext
+}
+async function getDeviceWithKey(env, hash) {
+  const pepperedKey = await storageKey(env, hash);
+  let rec = await env.OMAUSER.get(pepperedKey, "json");
+  if (rec) return { rec, key: pepperedKey, isPeppered: true };
+  // Fallback to unpeppered for migration
+  const oldKey = `device:${hash}`;
+  rec = await env.OMAUSER.get(oldKey, "json");
+  if (rec) return { rec, key: oldKey, isPeppered: false, needsMigration: true };
+  return { rec: null, key: pepperedKey };
 }
 
 // Incremental aggregate helpers - O(1)
@@ -182,8 +199,7 @@ export default {
         }
         const country = (request.headers.get("cf-ipcountry") || "XX").toUpperCase().slice(0, 2);
         const now = Date.now();
-        const key = storageKey(env, body.deviceHash);
-        const existing = await env.OMAUSER.get(key, "json");
+        const { rec: existing, key, needsMigration } = await getDeviceWithKey(env, body.deviceHash);
         const isNew = !existing || typeof existing.hash !== "string";
         // Only rate-limit new device registrations, not heartbeats (existing devices)
         if (isNew) {
@@ -198,7 +214,9 @@ export default {
         rec.country = /^[A-Z]{2}$/.test(country) ? country : "XX";
         rec.omarchyVersion = typeof body.omarchyVersion === "string" ? body.omarchyVersion.slice(0, 64) : "";
         rec.appVersion = typeof body.appVersion === "string" ? body.appVersion.slice(0, 32) : "";
-        await env.OMAUSER.put(key, JSON.stringify(rec), { expirationTtl: RECORD_TTL_SECONDS });
+        const putKey = needsMigration ? await storageKey(env, body.deviceHash) : key;
+        await env.OMAUSER.put(putKey, JSON.stringify(rec), { expirationTtl: RECORD_TTL_SECONDS });
+        if (needsMigration) await env.OMAUSER.delete(key);
 
         // Incremental aggregate update (O(1), no scan) with stale-heal
         let agg = await env.OMAUSER.get("stats:aggregate", "json");
@@ -261,8 +279,7 @@ export default {
       if (request.method === "POST" && path === "/api/forget") {
         const body = await request.json().catch(() => null);
         if (body && typeof body.deviceHash === "string" && /^[a-f0-9]{64}$/.test(body.deviceHash)) {
-          const key = storageKey(env, body.deviceHash);
-          const rec = await env.OMAUSER.get(key, "json");
+          const { rec, key } = await getDeviceWithKey(env, body.deviceHash);
           if (rec) {
             await env.OMAUSER.delete(key);
             let agg = await env.OMAUSER.get("stats:aggregate", "json");

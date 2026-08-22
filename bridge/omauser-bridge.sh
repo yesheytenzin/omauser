@@ -52,7 +52,19 @@ device_hash() {
     }
     fi
   fi
-  printf '%s' "$id" | sha256sum | awk '{ print $1 }'
+  local raw_hash
+  raw_hash="$(printf '%s' "$id" | sha256sum | awk '{ print $1 }')"
+  # Encrypt so even server admin cannot reverse to machine-id:
+  # per-device salt stored locally, never sent. Server only sees HMAC(salt, hash).
+  local salt_file="$RUNTIME/device-salt"
+  local salt=""
+  if [[ -f "$salt_file" ]]; then salt="$(cat "$salt_file")"
+  else {
+    salt="$(openssl rand -hex 16 2>/dev/null || head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n' 2>/dev/null || echo "omauser-$(date +%s%N)")"
+    printf '%s' "$salt" > "$salt_file"; chmod 600 "$salt_file"
+  }
+  fi
+  printf '%s' "${salt}${raw_hash}" | sha256sum | awk '{ print $1 }'
 }
 
 omarchy_version() {

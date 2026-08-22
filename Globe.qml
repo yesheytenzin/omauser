@@ -207,20 +207,26 @@ Item {
             for (var o = 0; o < offsets.length; o++) {
                 var s = toScreen(row.x + offsets[o], row.y)
                 if (s.x < -20 || s.x > canvas.width + 20 || s.y < -20 || s.y > canvas.height + 20) continue
-                // Outer glow for all dots - makes every dot glow
-                ctx.beginPath(); ctx.arc(s.x, s.y, radius + 6, 0, Math.PI * 2)
-                ctx.fillStyle = alpha(base, 0.10); ctx.fill()
-                ctx.beginPath(); ctx.arc(s.x, s.y, radius + 3.5, 0, Math.PI * 2)
-                ctx.fillStyle = alpha(base, 0.22); ctx.fill()
+                // Strong glow for all dots - visible even at low zoom
+                ctx.shadowColor = base
+                ctx.shadowBlur = 14
                 ctx.beginPath(); ctx.arc(s.x, s.y, radius, 0, Math.PI * 2)
                 ctx.fillStyle = base; ctx.fill()
-                // Subtle outer ring for all, stronger on hover/mine
+                ctx.shadowBlur = 0
+                // Outer halo - twice the radius, high alpha for visibility
+                ctx.beginPath(); ctx.arc(s.x, s.y, radius + 8, 0, Math.PI * 2)
+                ctx.fillStyle = alpha(base, 0.18); ctx.fill()
+                ctx.beginPath(); ctx.arc(s.x, s.y, radius + 4.5, 0, Math.PI * 2)
+                ctx.fillStyle = alpha(base, 0.32); ctx.fill()
+                ctx.beginPath(); ctx.arc(s.x, s.y, radius, 0, Math.PI * 2)
+                ctx.fillStyle = base; ctx.fill()
+                // Ring - always visible, stronger on hover/mine
                 if (isHover || mine) {
-                    ctx.beginPath(); ctx.arc(s.x, s.y, radius + 3, 0, Math.PI * 2)
-                    ctx.strokeStyle = alpha(base, 0.9); ctx.lineWidth = 1.4; ctx.stroke()
+                    ctx.beginPath(); ctx.arc(s.x, s.y, radius + 3.5, 0, Math.PI * 2)
+                    ctx.strokeStyle = alpha(base, 1.0); ctx.lineWidth = 1.6; ctx.stroke()
                 } else {
-                    ctx.beginPath(); ctx.arc(s.x, s.y, radius + 2.2, 0, Math.PI * 2)
-                    ctx.strokeStyle = alpha(base, 0.35); ctx.lineWidth = 0.9; ctx.stroke()
+                    ctx.beginPath(); ctx.arc(s.x, s.y, radius + 2.5, 0, Math.PI * 2)
+                    ctx.strokeStyle = alpha(base, 0.55); ctx.lineWidth = 1.0; ctx.stroke()
                 }
             }
         }
