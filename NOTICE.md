@@ -5,6 +5,5 @@ Countries data. Natural Earth data is in the public domain.
 
 Source: https://www.naturalearthdata.com/
 
-The Canvas globe interaction is adapted from
-`omarchy-radio-atlas` by Akshar Patel, available under the MIT License:
-https://github.com/AksharP5/omarchy-radio-atlas
+The country geometry is bundled locally and rendered with Qt Canvas. The
+geometry is derived from Natural Earth data as described above.

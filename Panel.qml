@@ -128,8 +128,9 @@ Panel {
         open: root.opened
         centerOnBar: true
         padding: 0
-        contentWidth: panel.fittedContentWidth(Math.min(panel.screenW * 0.68, panel.screenH * 0.82))
-        contentHeight: panel.fittedContentHeight(Math.min(panel.screenH * 0.82, panel.screenW * 0.68))
+        // Keep the equirectangular map at its native 2:1 aspect ratio.
+        contentWidth: panel.fittedContentWidth(Math.min(panel.screenW * 0.72, panel.screenH * 1.55))
+        contentHeight: panel.fittedContentHeight(Math.min(panel.screenW * 0.36, panel.screenH * 0.72))
 
         Item {
             anchors.fill: parent
@@ -139,7 +140,6 @@ Panel {
                 dots: root.dots
                 activeCountryCode: root.hostWidget && root.hostWidget.myCountry ? root.hostWidget.myCountry : ""
                 backgroundColor: Color.popups.background
-                sphereColor: Qt.darker(Color.popups.background, 1.45)
                 landColor: Qt.darker(Color.foreground, 2.7)
                 gridColor: Color.foreground
                 outlineColor: Color.foreground
