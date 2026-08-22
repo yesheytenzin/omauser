@@ -82,8 +82,8 @@ BarWidget {
     }
 
     function togglePanel() {
-        if (panelLoader.item && panelLoader.item.toggle)
-            panelLoader.item.toggle();
+        if (panelLoader.item && panelLoader.item.openFromHotkey)
+            panelLoader.item.openFromHotkey();
     }
 
     function injectPanel() {
