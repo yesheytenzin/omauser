@@ -259,9 +259,10 @@ BarWidget {
         BarIconButton {
             id: button
             bar: root.bar
-            text: "人" // unique Japanese character for Omauser (person/user) - aligned like other plugins
+            text: "人" // unique Japanese character - theme-aware via Color.foreground/accent
             slotSize: Style.bar.statusSlot
             fontSize: Style.bar.iconFont
+            foreground: Color.foreground
             active: root.registered && !root.optedOut
             useActiveColor: true
             activeColor: Color.accent
