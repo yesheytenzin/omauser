@@ -98,7 +98,7 @@ BarWidget {
         if (!target) return;
         if ("bar" in target) target.bar = root.bar;
         if ("settings" in target) target.settings = root.settings;
-        if ("anchorItem" in target) target.anchorItem = countPill.visible ? countPill : row;
+        if ("anchorItem" in target) target.anchorItem = button;
         if ("hostWidget" in target) target.hostWidget = root;
     }
 
@@ -258,7 +258,6 @@ BarWidget {
 
         BarIconButton {
             id: button
-            visible: false // icon hidden per request - keep for panel anchoring fallback
             bar: root.bar
             text: "\uf57d"
             slotSize: Style.bar.statusSlot
@@ -266,7 +265,11 @@ BarWidget {
             active: root.registered && !root.optedOut
             useActiveColor: true
             activeColor: Color.accent
-            tooltipText: ""
+            tooltipText: root.optedOut
+                ? "Omauser \u2022 not on the map \u2022 " + root.fmt(root.total) + " users \u2022 click to join"
+                : (root.bridgeReady
+                    ? "Omauser \u2022 " + root.fmt(root.total) + " users \u00b7 " + root.fmt(root.active30d) + " active (30d) \u2022 click for the map"
+                    : (root.bridgeError || "Omauser \u2022 not installed; click to retry"))
             onPressed: root.togglePanel()
         }
 
