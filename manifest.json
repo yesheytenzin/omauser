@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "tenzin.omauser",
   "name": "Omauser",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "author": "tenzin",
   "description": "Anonymously counts Omarchy installs and shows a world map with user dots from the bar. Opt-in by default: hashed device, country derived from IP server-side.",
   "kinds": [

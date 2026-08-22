@@ -82,9 +82,18 @@ omarchy_version() {
 post_register() {
   local hash="$1"
   [[ -n "$API_URL" ]] || { warn "no API URL configured - run setup with the worker URL"; return 1; }
+  # Optional manual location override from config.json:
+  #   "location": { "name": "Thimphu", "lat": 27.5, "lon": 89.6 }
+  local loc_json
+  loc_json="$(jq -c '.location // empty' "$CONFIG" 2>/dev/null || true)"
   local payload
-  payload="$(jq -cn --arg h "$hash" --arg v "$(omarchy_version)" --arg a "$VERSION" \
-    '{ deviceHash: $h, omarchyVersion: $v, appVersion: $a }')"
+  if [[ -n "$loc_json" ]]; then
+    payload="$(jq -cn --arg h "$hash" --arg v "$(omarchy_version)" --arg a "$VERSION" \
+      --argjson l "$loc_json" '{ deviceHash: $h, omarchyVersion: $v, appVersion: $a, location: $l }')"
+  else
+    payload="$(jq -cn --arg h "$hash" --arg v "$(omarchy_version)" --arg a "$VERSION" \
+      '{ deviceHash: $h, omarchyVersion: $v, appVersion: $a }')"
+  fi
   local out
   # Retry with exponential backoff for free-tier 429/5xx
   local attempt=0 delay=1

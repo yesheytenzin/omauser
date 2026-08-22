@@ -38,6 +38,10 @@ This is the whole contract — the server cannot learn more:
 - Map dots cluster per city-cell (`server/worker.js:buildStatsFromScan`);
   users in the same ~11 km area share one dot with a count. When IP geo is
   unavailable, the dot falls back to the country centroid.
+- IP-city lookups can jitter between neighboring cities; to pin your dot,
+  add an explicit override to `~/.cache/omauser/config.json` (bridge sends it
+  instead of the CF lookup):
+  `"location": { "name": "Thimphu", "lat": 27.5, "lon": 89.6 }`
 - Records are deduplicated by salted hash and expire after 12 months.
   `leave` deletes the record server-side in O(1).
 - Network-friendly by design: counts poll every ~5 min (shared server cache

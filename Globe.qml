@@ -210,6 +210,7 @@ Item {
                 if (md < bestD) { bestD = md; bestIdx = m }
             }
         }
+        console.log('[sim] PAINT country=', root.myCountryCode, 'cellLat=', root.myCellLat, 'best=', bestIdx)
         var W = root.mapWidth
         var offsets = [0, -W, W]
         for (var d = 0; d < preparedDots.length; d++) {
@@ -219,6 +220,7 @@ Item {
             // highlight fallback. Everyone else's dots stay blue.
             var byCountry = String(row.dot.code).toUpperCase() === String(root.myCountryCode).toUpperCase()
             var mine = (root.myCellLat === -999) ? byCountry : (d === bestIdx)
+            if (d === 0 || d === bestIdx) console.log('[sim] d',d,'code',row.dot.code,'lat',row.dot.lat,'best',bestIdx,'myCell',root.myCellLat,root.myCellLon,'mine',mine)
             var base = mine ? root.myColor : root.otherColor
             var radius = 1.6 + share * 1.8
             if (mine) radius += 1.2

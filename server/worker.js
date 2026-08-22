@@ -269,13 +269,23 @@ export default {
         rec.omarchyVersion = typeof body.omarchyVersion === "string" ? body.omarchyVersion.slice(0, 64) : "";
         rec.appVersion = typeof body.appVersion === "string" ? body.appVersion.slice(0, 32) : "";
         // Approx city (~11 km grid) from Cloudflare's IP geo of THIS request.
-        // Never stored raw; the client sends no location data at all.
-        const cf = request.cf || {};
-        const glat = Number(cf.latitude), glon = Number(cf.longitude);
-        const hasGeo = Number.isFinite(glat) && Number.isFinite(glon);
-        rec.cityLat = hasGeo ? Math.round(glat * 10) / 10 : null;
-        rec.cityLon = hasGeo ? Math.round(glon * 10) / 10 : null;
-        rec.cityName = typeof cf.city === "string" && cf.city ? cf.city.slice(0, 64) : "";
+        // Never stored raw; the client sends no location data at all — unless
+        // the user explicitly set a `location` override in config.json, which
+        // takes precedence and stabilizes the label against IP-geo jitter.
+        const ov = (body.location && typeof body.location === "object") ? body.location : null;
+        const ovLat = Number(ov && ov.lat), ovLon = Number(ov && ov.lon);
+        if (ov && Number.isFinite(ovLat) && Number.isFinite(ovLon)) {
+          rec.cityLat = Math.round(ovLat * 10) / 10;
+          rec.cityLon = Math.round(ovLon * 10) / 10;
+          rec.cityName = typeof ov.name === "string" && ov.name ? ov.name.slice(0, 64) : "";
+        } else {
+          const cf = request.cf || {};
+          const glat = Number(cf.latitude), glon = Number(cf.longitude);
+          const hasGeo = Number.isFinite(glat) && Number.isFinite(glon);
+          rec.cityLat = hasGeo ? Math.round(glat * 10) / 10 : null;
+          rec.cityLon = hasGeo ? Math.round(glon * 10) / 10 : null;
+          rec.cityName = typeof cf.city === "string" && cf.city ? cf.city.slice(0, 64) : "";
+        }
         const putKey = needsMigration ? await storageKey(env, body.deviceHash) : key;
         await env.OMAUSER.put(putKey, JSON.stringify(rec), { expirationTtl: RECORD_TTL_SECONDS });
         if (needsMigration) await env.OMAUSER.delete(key);
