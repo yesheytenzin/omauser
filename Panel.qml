@@ -65,7 +65,7 @@ Panel {
     }
 
     function joinMap() {
-        // Optimistic: show correct count instantly, then sync with server
+        // Optimistic: update counts instantly (dots will be corrected on fetch with proper lat/lon)
         if (!onMap) {
             total = total + 1
             active30d = active30d + 1
@@ -77,9 +77,7 @@ Panel {
                         var nd = dots.slice(); nd[i] = Object.assign({}, nd[i], {count: (Number(nd[i].count)||0)+1}); dots = nd; found = true; break
                     }
                 }
-                if (!found) {
-                    dots = dots.concat([{code: code, name: code, count: 1, lat: 0, lon: 0}])
-                }
+                // Don't add placeholder dot at 0,0 (Africa) - wait for server's correct lat/lon
             }
         }
         if (hostWidget && hostWidget.joinMap) hostWidget.joinMap()
