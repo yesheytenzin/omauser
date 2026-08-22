@@ -167,12 +167,12 @@ Item {
     function drawCountries(ctx) {
         var W = root.mapWidth
         var offsets = [0, -W, W]
+        // No country highlight - all land same color, dots show users
+        ctx.fillStyle = alpha(root.landColor, 0.9)
+        ctx.strokeStyle = alpha(root.borderColor, 0.55)
+        ctx.lineWidth = 0.7 / root.zoom
         for (var i = 0; i < preparedCountries.length; i++) {
             var country = preparedCountries[i]
-            var active = country.code === String(root.activeCountryCode).toUpperCase()
-            ctx.fillStyle = active ? alpha(root.dotColor, 0.3) : alpha(root.landColor, 0.9)
-            ctx.strokeStyle = active ? alpha(root.dotColor, 0.95) : alpha(root.borderColor, 0.55)
-            ctx.lineWidth = (active ? 1.5 : 0.7) / root.zoom
             for (var r = 0; r < country.rings.length; r++) {
                 var ring = country.rings[r]
                 for (var o = 0; o < offsets.length; o++) {
