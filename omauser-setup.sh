@@ -29,6 +29,11 @@ if [[ -x "$BRIDGE_DST" && -f "$VERSION_FILE" && "$(cat "$VERSION_FILE")" == "$VE
   exit 0
 fi
 
+# Preserve a previously configured API URL across reinstalls (a cache wipe
+# or version bump must not silently point the plugin back at the default).
+PREV_API="$(jq -er '.apiUrl // ""' "$CONFIG" 2>/dev/null || true)"
+[[ -n "$PREV_API" && "$PREV_API" != *YOUR_SUBDOMAIN* ]] && API_URL="$PREV_API"
+
 install -Dm0755 "$BRIDGE_SRC" "$BRIDGE_DST"
 printf '%s' "$VERSION" > "$VERSION_FILE"
 jq -n --arg url "$API_URL" --arg version "$VERSION" \

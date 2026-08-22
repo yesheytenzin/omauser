@@ -2,13 +2,17 @@
 # Omauser bridge - device registration, heartbeat and stats/map fetches.
 # Pure bash + curl + jq: no venv, no python deps.
 #
+# Opt-in is the default: installing/enabling the plugin registers the device
+# automatically. Opting out (panel -> Remove my device) stops sending and
+# deletes the record; joining again re-registers.
+#
 # Usage:
 #   omauser-bridge.sh status                print state.json (JSON)
-#   omauser-bridge.sh consent yes|no        set consent; yes -> register now
 #   omauser-bridge.sh register              register/heartbeat against the API
+#   omauser-bridge.sh opt-out               remove device from the server map
+#   omauser-bridge.sh join                  opt back in and register
 #   omauser-bridge.sh stats                 GET /api/stats -> stats.json
 #   omauser-bridge.sh map                   GET /api/map -> map.json
-#   omauser-bridge.sh forget                POST /api/forget, reset registration
 #   omauser-bridge.sh device-hash           print sha256 of /etc/machine-id
 set -euo pipefail
 
@@ -31,7 +35,7 @@ fail() { printf '\033[1;31m[omauser]\033[0m %s\n' "$*" >&2; exit 1; }
 
 mkdir -p "$RUNTIME"
 
-[[ -f "$STATE" ]] || echo '{"consent":"","deviceHash":"","registered":false,"lastHeartbeat":0}' > "$STATE"
+[[ -f "$STATE" ]] || echo '{"optedOut":false,"deviceHash":"","registered":false,"lastHeartbeat":0}' > "$STATE"
 
 read_state()  { jq -er "$1 // empty" "$STATE" 2>/dev/null || echo ""; }
 write_state() { jq "$@" "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"; }
@@ -67,7 +71,6 @@ post_register() {
         '.total = $t | .active30d = $a | .updatedAt = (now * 1000 | floor)' "$STATS_CACHE" \
         > "$STATS_CACHE.tmp" && mv "$STATS_CACHE.tmp" "$STATS_CACHE"
     fi
-    echo "$out" > /dev/null
     say "registered (total $total, active $active)"
     return 0
   fi
@@ -100,41 +103,47 @@ cmd_status() {
     }'
 }
 
-cmd_consent() {
-  case "${1:-}" in
-    yes)
-      exec 9>"$LOCK"
-      flock 9
-      write_state '.consent = "yes"'
-      local hash; hash="$(device_hash)"
-      post_register "$hash" || true
-      ;;
-    no)
-      exec 9>"$LOCK"
-      flock 9
-      write_state '.consent = "no" | .registered = false'
-      ;;
-    *) fail "usage: omauser-bridge.sh consent yes|no" ;;
-  esac
-}
-
 cmd_register() {
   exec 9>"$LOCK"
   flock 9
-  local consent hash
-  consent="$(read_state '.consent')"
+  local opted_out hash
+  opted_out="$(read_state '.optedOut')"
+  [[ "$opted_out" == "true" ]] && { warn "opted out - run 'join' to rejoin the map"; exit 0; }
   hash="$(read_state '.deviceHash')"
   [[ -z "$hash" ]] && hash="$(device_hash)"
-  [[ "$consent" == "yes" ]] || { warn "consent not given - refusing to register"; exit 0; }
+  post_register "$hash" || true
+}
+
+cmd_opt_out() {
+  local hash
+  hash="$(read_state '.deviceHash')"
+  if [[ -n "$hash" && -n "$API_URL" ]]; then
+    curl -sS --fail --max-time 15 -H 'content-type: application/json' \
+      -d "{\"deviceHash\":\"$hash\"}" "$API_URL/api/forget" >/dev/null 2>&1 || true
+  fi
+  exec 9>"$LOCK"
+  flock 9
+  write_state '.optedOut = true | .registered = false | .lastHeartbeat = 0'
+  rm -f "$STATS_CACHE" "$MAP_CACHE"
+  say "device removed from the map"
+}
+
+cmd_join() {
+  exec 9>"$LOCK"
+  flock 9
+  write_state '.optedOut = false'
+  local hash
+  hash="$(read_state '.deviceHash')"
+  [[ -z "$hash" ]] && hash="$(device_hash)"
   post_register "$hash" || true
 }
 
 cmd_heartbeat() {
   exec 9>"$LOCK"
   flock 9
-  local consent hash last
-  consent="$(read_state '.consent')"
-  [[ "$consent" == "yes" ]] || exit 0
+  local opted_out hash last
+  opted_out="$(read_state '.optedOut')"
+  [[ "$opted_out" == "true" ]] && exit 0
   last="$(read_state '.lastHeartbeat')"
   hash="$(read_state '.deviceHash')"
   [[ -n "$hash" ]] || hash="$(device_hash)"
@@ -144,30 +153,16 @@ cmd_heartbeat() {
   fi
 }
 
-cmd_forget() {
-  local hash
-  hash="$(read_state '.deviceHash')"
-  if [[ -n "$hash" && -n "$API_URL" ]]; then
-    curl -sS --fail --max-time 15 -H 'content-type: application/json' \
-      -d "{\"deviceHash\":\"$hash\"}" "$API_URL/api/forget" >/dev/null 2>&1 || true
-  fi
-  exec 9>"$LOCK"
-  flock 9
-  write_state '.registered = false | .lastHeartbeat = 0'
-  rm -f "$STATS_CACHE" "$MAP_CACHE"
-  say "device removed from the map"
-}
-
 case "${1:-}" in
   device-hash) device_hash ;;
   status)      cmd_status ;;
-  consent)     cmd_consent "${2:-}" ;;
   register)    cmd_register ;;
+  opt-out)     cmd_opt_out ;;
+  join)        cmd_join ;;
   heartbeat)   cmd_heartbeat ;;
   stats)       fetch_json "api/stats" "$STATS_CACHE" ;;
   map)         fetch_json "api/map" "$MAP_CACHE" ;;
-  forget)      cmd_forget ;;
   *)
-    fail "unknown command: ${1:-<none>} (use status|consent|register|heartbeat|stats|map|forget|device-hash)"
+    fail "unknown command: ${1:-<none>} (use status|register|opt-out|join|heartbeat|stats|map|device-hash)"
     ;;
 esac

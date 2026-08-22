@@ -1,15 +1,17 @@
 # Omauser
 
 Count every Omarchy install and show a live world map of Omarchy users
-from the bar. **Opt-in only** — nothing is sent until you press
-"Join the map".
+from the bar. **Opt-in by default** — installing the plugin puts your
+device on the map, and leaving it is one click in the panel UI.
 
 ## What it does
 
 - A bar widget shows the total user count and 30-day active count.
 - Clicking it opens a world map panel; dots are sized by the number of
   users in each country. Hover a dot for country + count + share.
-- A right rail lists the top 10 countries plus your own join/remove state.
+- A right rail lists the top 10 countries plus your own on/off state:
+  **Remove my device** leaves the map and deletes the server record;
+  **Join the map** puts you back on.
 
 ## Privacy
 
@@ -33,8 +35,9 @@ This is the whole contract — the server cannot learn more:
 omarchy plugin add https://github.com/yesheytenzin/omauser.git --enable --yes
 ```
 
-On the first shell start after enabling, a popup asks for consent.
-Declining writes a local opt-out marker and nothing is ever sent.
+Installing/enabling the plugin registers the device automatically
+(opt-in by default). Opt out any time from the panel → **Remove my device**;
+your record is deleted server-side and nothing is sent afterwards.
 
 ## Server
 
@@ -73,6 +76,10 @@ omarchy plugin validate .
 python3 server/mock.py                # local API with sample data
 # point a test install at it:
 OMAUSER_API_URL=http://127.0.0.1:8777 bash omauser-setup.sh
+# test in the live shell:
+rsync -a --delete --exclude .git . ~/.config/omarchy/plugins/tenzin.omauser/
+omarchy-restart-shell                 # needed after QML edits (component cache)
+quickshell ipc -p /usr/share/omarchy/shell call tenzin.omauser status
 ```
 
 `assets/world.svg` is generated from public-domain

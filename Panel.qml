@@ -30,8 +30,8 @@ Panel {
     property string errorText: ""
 
     readonly property bool onMap: hostWidget ? hostWidget.registered === true : false
-    readonly property bool consentMissing: hostWidget ? hostWidget.consentPending === true : false
-    readonly property bool notJoined: hostWidget ? (hostWidget.consentPending || hostWidget.optedOut) : true
+    readonly property bool optedOut: hostWidget ? hostWidget.optedOut === true : false
+    readonly property bool notJoined: !root.onMap
 
     function fmt(n) {
         return Number(n || 0).toLocaleString();
@@ -89,8 +89,8 @@ Panel {
         Qt.callLater(root.fetchMap);
     }
 
-    function forgetDevice() {
-        if (hostWidget && hostWidget.forgetDevice) hostWidget.forgetDevice();
+    function optOut() {
+        if (hostWidget && hostWidget.optOut) hostWidget.optOut();
         Qt.callLater(root.fetchMap);
     }
 
@@ -256,24 +256,6 @@ Panel {
                     Layout.alignment: Qt.AlignVCenter
                 }
                 Item { Layout.fillWidth: true }
-
-                Text {
-                    visible: root.consentMissing
-                    text: "not on the map yet \u2014 click the bar icon to join"
-                    font.family: Style.font.family
-                    font.pixelSize: Style.font.caption
-                    color: Color.urgent
-                    Layout.alignment: Qt.AlignVCenter
-                }
-                Button {
-                    visible: root.notJoined
-                    text: "Join the map"
-                    fontSize: Style.font.caption
-                    foreground: Color.foreground
-                    accent: Color.accent
-                    bordered: true
-                    onClicked: root.joinMap()
-                }
             }
 
             PanelSeparator { Layout.fillWidth: true; opacity: 0.5 }
@@ -470,18 +452,18 @@ Panel {
                                 Layout.fillWidth: true
                                 text: root.onMap
                                     ? "\uf058  You are on the map"
-                                    : (root.consentMissing
-                                        ? "\uf0ac  Not on the map yet"
-                                        : "\uf070  Not on the map")
+                                    : (root.optedOut
+                                        ? "\uf070  You left the map"
+                                        : "\uf0ac  Joining the map \u2026")
                                 font.family: Style.font.family
                                 font.pixelSize: Style.font.caption
                                 font.bold: true
-                                color: root.onMap ? Color.accent : Color.urgent
+                                color: root.onMap ? Color.accent : (root.optedOut ? Color.urgent : Qt.darker(Color.foreground, 1.2))
                             }
                             Text {
                                 Layout.fillWidth: true
-                                text: "Only your country is shown (derived from your IP server-side). "
-                                    + "No IP, no precise location, no name."
+                                text: "Opt-in by default. Only your country is shown (derived from your IP "
+                                    + "server-side) \u2014 no IP, no precise location, no name. Leave anytime."
                                 font.family: Style.font.family
                                 font.pixelSize: Style.font.caption
                                 color: Qt.darker(Color.foreground, 1.3)
@@ -494,7 +476,17 @@ Panel {
                                 text: "Remove my device"
                                 fontSize: Style.font.caption
                                 foreground: Color.foreground
-                                onClicked: root.forgetDevice()
+                                onClicked: root.optOut()
+                            }
+                            Button {
+                                Layout.fillWidth: true
+                                visible: !root.onMap
+                                text: "Join the map"
+                                fontSize: Style.font.caption
+                                foreground: Color.foreground
+                                accent: Color.accent
+                                bordered: true
+                                onClicked: root.joinMap()
                             }
                         }
                     }
