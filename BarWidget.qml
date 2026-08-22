@@ -258,6 +258,7 @@ BarWidget {
 
         BarIconButton {
             id: button
+            visible: false
             bar: root.bar
             text: "\uf57d"
             slotSize: Style.bar.statusSlot
@@ -265,32 +266,21 @@ BarWidget {
             active: root.registered && !root.optedOut
             useActiveColor: true
             activeColor: Color.accent
-            tooltipText: root.optedOut
-                ? "Omauser \u2022 not on the map \u2022 " + root.fmt(root.total) + " users \u2022 click to join"
-                : (root.bridgeReady
-                    ? "Omauser \u2022 " + root.fmt(root.total) + " users \u00b7 " + root.fmt(root.active30d) + " active (30d) \u2022 click for the map"
-                    : (root.bridgeError || "Omauser \u2022 not installed; click to retry"))
+            tooltipText: ""
             onPressed: root.togglePanel()
         }
 
-        Rectangle {
+        Text {
             id: countPill
             visible: root.bridgeReady
             Layout.alignment: Qt.AlignVCenter
-            Layout.preferredHeight: Style.bar.statusSlot
-            implicitWidth: Math.max(28, pillText.implicitWidth + 16)
-            implicitHeight: Style.bar.statusSlot
-            radius: Style.bar.statusSlot / 2
-            color: root.optedOut
-                ? Qt.rgba(Color.urgent.r, Color.urgent.g, Color.urgent.b, 0.14)
-                : (root.registered
-                    ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.14)
-                    : Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08))
-            border.width: 1
-            border.color: root.optedOut
-                ? Color.urgent
-                : (root.registered ? Color.accent : Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.18))
-            opacity: root.bridgeReady ? 1.0 : 0.6
+            text: root.countLabel
+            color: root.optedOut ? Color.urgent : (root.registered ? Color.accent : (root.bar ? root.bar.barForeground : Color.foreground))
+            font.family: root.bar ? root.bar.fontFamily : Style.font.family
+            font.pixelSize: Style.font.caption
+            font.weight: Font.Medium
+            verticalAlignment: Text.AlignVCenter
+            renderType: Text.NativeRendering
 
             property string tooltipText: root.optedOut
                 ? "Omauser \u2022 not on the map \u2022 " + root.fmt(root.total) + " users \u2022 click to join"
@@ -298,22 +288,12 @@ BarWidget {
                     ? "Omauser \u2022 " + root.fmt(root.total) + " users \u00b7 " + root.fmt(root.active30d) + " active (30d) \u2022 click for the map"
                     : (root.bridgeError || "Omauser \u2022 not installed; click to retry"))
 
-            Behavior on color { ColorAnimation { duration: 180 } }
-            Behavior on border.color { ColorAnimation { duration: 180 } }
-
+            // Keep ids for compatibility
             Text {
                 id: pillText
-                anchors.centerIn: parent
+                visible: false
                 text: root.countLabel
-                color: root.optedOut ? Color.urgent : (root.registered ? Color.accent : Color.foreground)
-                font.family: root.bar ? root.bar.fontFamily : Style.font.family
-                font.pixelSize: Style.font.caption
-                font.weight: Font.Medium
-                verticalAlignment: Text.AlignVCenter
-                renderType: Text.NativeRendering
             }
-
-            // Keep id for compatibility
             Text {
                 id: countText
                 visible: false
