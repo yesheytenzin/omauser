@@ -258,21 +258,24 @@ BarWidget {
 
         BarIconButton {
             id: button
-            visible: false
             bar: root.bar
-            text: "\uf57d"
+            text: "人" // unique Japanese character for Omauser (person/user) - aligned like other plugins
             slotSize: Style.bar.statusSlot
             fontSize: Style.bar.iconFont
             active: root.registered && !root.optedOut
             useActiveColor: true
             activeColor: Color.accent
-            tooltipText: ""
+            tooltipText: root.optedOut
+                ? "Omauser \u2022 not on the map \u2022 " + root.fmt(root.total) + " users \u2022 click to join"
+                : (root.bridgeReady
+                    ? "Omauser \u2022 " + root.fmt(root.total) + " users \u00b7 " + root.fmt(root.active30d) + " active (30d) \u2022 click for the map"
+                    : (root.bridgeError || "Omauser \u2022 not installed; click to retry"))
             onPressed: root.togglePanel()
         }
 
         Text {
             id: countPill
-            visible: root.bridgeReady
+            visible: false // hidden per "use Japanese character instead of number"
             Layout.alignment: Qt.AlignVCenter
             text: root.countLabel
             color: root.optedOut ? Color.urgent : (root.registered ? Color.accent : (root.bar ? root.bar.barForeground : Color.foreground))
@@ -282,11 +285,7 @@ BarWidget {
             verticalAlignment: Text.AlignVCenter
             renderType: Text.NativeRendering
 
-            property string tooltipText: root.optedOut
-                ? "Omauser \u2022 not on the map \u2022 " + root.fmt(root.total) + " users \u2022 click to join"
-                : (root.bridgeReady
-                    ? "Omauser \u2022 " + root.fmt(root.total) + " users \u00b7 " + root.fmt(root.active30d) + " active (30d) \u2022 click for the map"
-                    : (root.bridgeError || "Omauser \u2022 not installed; click to retry"))
+            property string tooltipText: ""
 
             // Keep ids for compatibility
             Text {
