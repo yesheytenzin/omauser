@@ -98,7 +98,7 @@ BarWidget {
         if (!target) return;
         if ("bar" in target) target.bar = root.bar;
         if ("settings" in target) target.settings = root.settings;
-        if ("anchorItem" in target) target.anchorItem = button;
+        if ("anchorItem" in target) target.anchorItem = countPill.visible ? countPill : row;
         if ("hostWidget" in target) target.hostWidget = root;
     }
 
@@ -258,18 +258,15 @@ BarWidget {
 
         BarIconButton {
             id: button
+            visible: false // icon hidden per request - keep for panel anchoring fallback
             bar: root.bar
-            text: "\uf57d" // globe-americas - more distinctive than \uf0ac
+            text: "\uf57d"
             slotSize: Style.bar.statusSlot
             fontSize: Style.bar.iconFont
             active: root.registered && !root.optedOut
             useActiveColor: true
             activeColor: Color.accent
-            tooltipText: root.optedOut
-                ? "Omauser \u2022 not on the map \u2022 " + root.fmt(root.total) + " users \u2022 click to join"
-                : (root.bridgeReady
-                    ? "Omauser \u2022 " + root.fmt(root.total) + " users \u00b7 " + root.fmt(root.active30d) + " active (30d) \u2022 click for the map"
-                    : (root.bridgeError || "Omauser \u2022 not installed; click to retry"))
+            tooltipText: ""
             onPressed: root.togglePanel()
         }
 
@@ -290,6 +287,12 @@ BarWidget {
                 ? Color.urgent
                 : (root.registered ? Color.accent : Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.18))
             opacity: root.bridgeReady ? 1.0 : 0.6
+
+            property string tooltipText: root.optedOut
+                ? "Omauser \u2022 not on the map \u2022 " + root.fmt(root.total) + " users \u2022 click to join"
+                : (root.bridgeReady
+                    ? "Omauser \u2022 " + root.fmt(root.total) + " users \u00b7 " + root.fmt(root.active30d) + " active (30d) \u2022 click for the map"
+                    : (root.bridgeError || "Omauser \u2022 not installed; click to retry"))
 
             Behavior on color { ColorAnimation { duration: 180 } }
             Behavior on border.color { ColorAnimation { duration: 180 } }
@@ -314,15 +317,19 @@ BarWidget {
             }
 
             MouseArea {
+                id: pillMouse
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
+                hoverEnabled: true
+                onEntered: if (root.bar) root.bar.showTooltip(countPill, countPill.tooltipText)
+                onExited: if (root.bar) root.bar.hideTooltip(countPill)
                 onClicked: root.togglePanel()
             }
         }
 
         Text {
             id: activeText
-            visible: root.bridgeReady && root.total > 0
+            visible: false // hidden per "no icon just number" - keep pill only
             Layout.alignment: Qt.AlignVCenter
             text: "· " + root.fmt(root.active30d) + " active"
             color: Qt.darker(root.bar ? root.bar.barForeground : Color.foreground, 1.15)
@@ -332,12 +339,6 @@ BarWidget {
             opacity: 0.85
             verticalAlignment: Text.AlignVCenter
             renderType: Text.NativeRendering
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.togglePanel()
-            }
         }
     }
 
