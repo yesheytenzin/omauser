@@ -70,22 +70,31 @@ BarWidget {
         statsProc.running = true;
     }
 
+    // Serialized join/leave: Quickshell ignores running=true while a Process
+    // is already executing, which silently dropped clicks. Queue instead.
+    property string _pendingOp: ""
+
+    function _startRegister(op) {
+        if (registerProc.running) { root._pendingOp = op; return }
+        root._pendingOp = ""
+        registerProc.command = ["bash", root.bridge, op];
+        registerProc.running = true;
+    }
+
     function joinMap() {
         if (!root.bridgeReady) return;
-        if (root.registered) return
+        if (root.registered && !registerProc.running) return
         root.optedOut = false;
         root.registered = true
-        registerProc.command = ["bash", root.bridge, "join"];
-        registerProc.running = true;
+        _startRegister("join");
     }
 
     function optOut() {
         if (!root.bridgeReady) return;
-        if (!root.registered) return
+        if (!root.registered && !registerProc.running) return
         root.optedOut = true;
         root.registered = false
-        registerProc.command = ["bash", root.bridge, "opt-out"];
-        registerProc.running = true;
+        _startRegister("opt-out");
     }
 
     function togglePanel() {
@@ -229,7 +238,14 @@ BarWidget {
             // Force-refresh after join/leave so the bar count comes from a
             // full scan (truth) instead of the 5m cache, which may briefly
             // predate the registration write.
-            if (!root.optedOut) root.fetchStats(true); else root.fetchStats(true);
+            root.fetchStats(true);
+            // Run a click that arrived while this operation was executing.
+            if (root._pendingOp !== "") {
+                const op = root._pendingOp
+                root._pendingOp = ""
+                registerProc.command = ["bash", root.bridge, op];
+                registerProc.running = true;
+            }
         }
     }
 

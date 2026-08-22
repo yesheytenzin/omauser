@@ -282,7 +282,11 @@ Panel {
     function fmt(value) { return Number(value || 0).toLocaleString() }
 
     function fetchMap(force) {
-        if (mapProc.running) return
+        if (mapProc.running) {
+            // Busy - retry shortly so a queued force refetch is never lost.
+            if (force) { pendingMapRefetch = true; postOpMapFetch.restart() }
+            return
+        }
         // Fast read: show cached map instantly for normal refresh;
         // for join/leave (force) keep optimistic data and skip stale cache
         if (!force && !loading) readMapCache()
@@ -316,6 +320,15 @@ Panel {
         errorText = ""
     }
 
+    // Set when a join/leave wants a forced map refetch; fires shortly after
+    // so the registration write has landed server-side first (KV propagation).
+    property bool pendingMapRefetch: false
+    Timer {
+        id: postOpMapFetch
+        interval: 1500
+        onTriggered: if (root.pendingMapRefetch) { root.pendingMapRefetch = false; root.fetchMap(true) }
+    }
+
     function joinMap() {
         if (onMap || loading) return
         // Optimistic: add dot instantly at correct location, counts will be confirmed by server
@@ -340,7 +353,8 @@ Panel {
             hostWidget.optedOut = false
         }
         if (hostWidget && hostWidget.joinMap) hostWidget.joinMap()
-        fetchMap(true)
+        pendingMapRefetch = true
+        postOpMapFetch.restart()
     }
 
     function optOut() {
@@ -360,7 +374,8 @@ Panel {
             hostWidget.optedOut = true
         }
         if (hostWidget && hostWidget.optOut) hostWidget.optOut()
-        fetchMap(true)
+        pendingMapRefetch = true
+        postOpMapFetch.restart()
     }
 
     Process {

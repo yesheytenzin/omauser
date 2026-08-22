@@ -122,6 +122,16 @@ async function listDevices(env) {
 // the shared cache correct immediately, then converge with KV.
 async function buildStatsFromScan(env, opts = {}) {
   const now = Date.now();
+  // Apply any very recent explicit write that list propagation may hide.
+  if (!opts.addRec && !opts.removeHash) {
+    try {
+      const last = await env.OMAUSER.get("stats:lastop", "json");
+      if (last && Date.now() - (last.at || 0) < 120000) {
+        if (last.op === "add" && last.rec) opts = { addRec: last.rec };
+        else if (last.op === "remove" && last.hash) opts = { removeHash: last.hash };
+      }
+    } catch {}
+  }
   let devices = await listDevices(env);
   if (opts.removeHash) devices = devices.filter(d => d.hash !== opts.removeHash);
   if (opts.addRec) {
@@ -168,10 +178,9 @@ async function cachedStats(env, force, opts = {}) {
     try { payload = await buildStatsFromD1(env); } catch {}
   }
   if (!payload) payload = await buildStatsFromScan(env, opts);
-  if (!opts.addRec && !opts.removeHash) {
-    // Only cache unadjusted views - adjusted ones are transient corrections
-    await env.OMAUSER.put("cache:stats", JSON.stringify({ at: Date.now(), payload }), { expirationTtl: STATS_CACHE_TTL_SECONDS });
-  }
+  // Always (re)write the shared cache - even with adjustments. A merged view
+  // is far more accurate than leaving a pre-write stale cache in place.
+  await env.OMAUSER.put("cache:stats", JSON.stringify({ at: Date.now(), payload }), { expirationTtl: STATS_CACHE_TTL_SECONDS });
   return payload;
 }
 
@@ -212,6 +221,9 @@ export default {
         const putKey = needsMigration ? await storageKey(env, body.deviceHash) : key;
         await env.OMAUSER.put(putKey, JSON.stringify(rec), { expirationTtl: RECORD_TTL_SECONDS });
         if (needsMigration) await env.OMAUSER.delete(key);
+        // Record the explicit write so any rebuild within the propagation
+        // window can merge it (see buildStatsFromScan).
+        await env.OMAUSER.put("stats:lastop", JSON.stringify({ op: "add", at: now, rec: JSON.parse(JSON.stringify(rec)) }), { expirationTtl: 300 });
 
         if (env.DB) {
           try {
@@ -237,6 +249,7 @@ export default {
             if (env.DB) {
               try { await env.DB.prepare("DELETE FROM devices WHERE hash=?").bind(rec.hash).run(); } catch {}
             }
+            await env.OMAUSER.put("stats:lastop", JSON.stringify({ op: "remove", at: Date.now(), hash: rec.hash }), { expirationTtl: 300 });
             // Refresh cache excluding the just-deleted device so polls right
             // after leave don't briefly show it (KV list lag).
             await env.OMAUSER.delete("cache:stats");
