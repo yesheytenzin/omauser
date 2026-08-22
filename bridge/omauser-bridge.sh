@@ -43,7 +43,15 @@ write_state() { jq "$@" "$STATE" > "$STATE.tmp" && mv "$STATE.tmp" "$STATE"; }
 device_hash() {
   local id=""
   [[ -r /etc/machine-id ]] && id="$(tr -d '\n' < /etc/machine-id)"
-  [[ -n "$id" ]] || id="$(hostname)"
+  if [[ -z "$id" ]]; then
+    local seed="$RUNTIME/device-seed"
+    if [[ -f "$seed" ]]; then id="$(cat "$seed")"
+    else {
+      id="$(openssl rand -hex 16 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || echo "$HOSTNAME-$(date +%s%N)")"
+      printf '%s' "$id" > "$seed"; chmod 600 "$seed"
+    }
+    fi
+  fi
   printf '%s' "$id" | sha256sum | awk '{ print $1 }'
 }
 

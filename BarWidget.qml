@@ -10,8 +10,8 @@ BarWidget {
     moduleName: "tenzin.omauser"
 
     visible: true
-    implicitWidth: row.implicitWidth
-    implicitHeight: row.implicitHeight
+    implicitWidth: button.implicitWidth
+    implicitHeight: button.implicitHeight
 
     readonly property string runtime: (Quickshell.env("XDG_CACHE_HOME") || (Quickshell.env("HOME") + "/.cache")) + "/omauser"
     readonly property string setupScript: Qt.resolvedUrl("omauser-setup.sh").toString().replace(/^file:\/\//, "")
@@ -251,80 +251,29 @@ BarWidget {
         }
     }
 
-    RowLayout {
-        id: row
+    // Canon bar layout - icon only, matches SystemUpdate/Microphone/omamovie
+    // OpticalGlyph inside BarIconButton handles optical centering and theme
+    // via bar.barForeground / bar.urgent automatically.
+    BarIconButton {
+        id: button
         anchors.fill: parent
-        spacing: 6
-
-        BarIconButton {
-            id: button
-            bar: root.bar
-            text: "人" // unique Japanese character - theme-aware via Color.foreground/accent
-            slotSize: Style.bar.statusSlot
-            fontSize: Style.bar.iconFont
-            foreground: Color.foreground
-            active: root.registered && !root.optedOut
-            useActiveColor: true
-            activeColor: Color.accent
-            tooltipText: root.optedOut
-                ? "Omauser \u2022 not on the map \u2022 " + root.fmt(root.total) + " users \u2022 click to join"
-                : (root.bridgeReady
-                    ? "Omauser \u2022 " + root.fmt(root.total) + " users \u00b7 " + root.fmt(root.active30d) + " active (30d) \u2022 click for the map"
-                    : (root.bridgeError || "Omauser \u2022 not installed; click to retry"))
-            onPressed: root.togglePanel()
-        }
-
-        Text {
-            id: countPill
-            visible: false // hidden per "use Japanese character instead of number"
-            Layout.alignment: Qt.AlignVCenter
-            text: root.countLabel
-            color: root.optedOut ? Color.urgent : (root.registered ? Color.accent : (root.bar ? root.bar.barForeground : Color.foreground))
-            font.family: root.bar ? root.bar.fontFamily : Style.font.family
-            font.pixelSize: Style.font.caption
-            font.weight: Font.Medium
-            verticalAlignment: Text.AlignVCenter
-            renderType: Text.NativeRendering
-
-            property string tooltipText: ""
-
-            // Keep ids for compatibility
-            Text {
-                id: pillText
-                visible: false
-                text: root.countLabel
-            }
-            Text {
-                id: countText
-                visible: false
-                text: root.countLabel
-            }
-
-            MouseArea {
-                id: pillMouse
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                hoverEnabled: true
-                onEntered: if (root.bar) root.bar.showTooltip(countPill, countPill.tooltipText)
-                onExited: if (root.bar) root.bar.hideTooltip(countPill)
-                onClicked: root.togglePanel()
-            }
-        }
-
-        Text {
-            id: activeText
-            visible: false // hidden per "no icon just number" - keep pill only
-            Layout.alignment: Qt.AlignVCenter
-            text: "· " + root.fmt(root.active30d) + " active"
-            color: Qt.darker(root.bar ? root.bar.barForeground : Color.foreground, 1.15)
-            font.family: root.bar ? root.bar.fontFamily : Style.font.family
-            font.pixelSize: Style.font.caption
-            font.weight: Font.Normal
-            opacity: 0.85
-            verticalAlignment: Text.AlignVCenter
-            renderType: Text.NativeRendering
-        }
+        bar: root.bar
+        text: "人"
+        slotSize: Style.bar.statusSlot
+        tooltipText: root.optedOut
+            ? "Omauser \u2022 not on the map \u2022 " + root.fmt(root.total) + " users \u2022 click to join"
+            : (root.bridgeReady
+                ? "Omauser \u2022 " + root.fmt(root.total) + " users \u00b7 " + root.fmt(root.active30d) + " active (30d) \u2022 click for the map"
+                : (root.bridgeError || "Omauser \u2022 not installed; click to retry"))
+        onPressed: root.togglePanel()
     }
+
+    // Keep ids for compatibility with older Panel injectPanel fallbacks
+    Item { id: row; visible: false }
+    Text { id: countPill; visible: false; text: root.countLabel }
+    Text { id: pillText; visible: false; text: root.countLabel }
+    Text { id: countText; visible: false; text: root.countLabel }
+    Text { id: activeText; visible: false }
 
     Loader {
         id: panelLoader
