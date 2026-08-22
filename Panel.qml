@@ -129,8 +129,8 @@ Panel {
         centerOnBar: true
         padding: 0
         // Keep the equirectangular map at its native 2:1 aspect ratio.
-        contentWidth: panel.fittedContentWidth(Math.min(panel.screenW * 0.55, panel.screenH * 1.21))
-        contentHeight: panel.fittedContentHeight(Math.min(panel.screenW * 0.352, panel.screenH * 0.704))
+        contentWidth: panel.fittedContentWidth(Math.min(panel.screenW * 0.605, panel.screenH * 1.331))
+        contentHeight: panel.fittedContentHeight(Math.min(panel.screenW * 0.3872, panel.screenH * 0.7744))
 
         Item {
             anchors.fill: parent
