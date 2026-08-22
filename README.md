@@ -13,27 +13,31 @@ device on the globe, and leaving it is one click in the panel UI.
   **Remove my device** leaves the map and deletes the server record;
   **Join the map** puts you back on.
 
-## Privacy
+## Privacy (even admin cannot view individual)
 
 This is the whole contract — the server cannot learn more:
 
-| Sent (client → server)     | Derived server-side          | Never collected          |
-|----------------------------|------------------------------|--------------------------|
-| sha256 of `/etc/machine-id`| country from `CF-IPCountry`  | IP address (not stored)  |
-| Omarchy version            | totals per country           | precise location, name   |
-| plugin version             |                              | hostname                 |
+| Sent (client → server)                          | Derived server-side          | Never collected / Encrypted                 |
+|-------------------------------------------------|------------------------------|---------------------------------------------|
+| `sha256(salt + sha256(machine-id))` per-device salt `~/.cache/omauser/device-salt` (never sent) | country from `CF-IPCountry`  | IP address (not stored, only ephemeral `rl:*` 24h) |
+| Omarchy version                                 | totals per country           | precise location, name, hostname            |
+| plugin version                                  |                              | raw `machine-id`                            |
 
 - The client never sends coordinates; the server derives the country from
-  the connecting IP and discards the IP.
-- Records are deduplicated by device hash and expire after 12 months.
-- You can leave the map at any time: panel → "Remove my device".
-- Register requests are rate-limited per IP (10/day).
+  the connecting IP and discards the IP. The `deviceHash` is **double-hashed with a per-device random salt** (`bridge.sh:device_hash`), so the `device:<hash>` key in KV is opaque — even with KV dump the admin cannot reverse to `machine-id` without the salt stored only on the device (`0600`).
+- Dots are **country centroids** (`server/countries.js`), not GPS — a dot covers a whole country.
+- Records are deduplicated by salted hash and expire after 12 months (`RECORD_TTL 1y`). `leave` deletes `device:*` + decrements `stats:aggregate` `O(1)`.
+- You can leave at any time: panel → `leave` (red `人` → `urgent` pill) or bar `人` → `Esc`. Register is rate-limited per IP `100/day` / per hash `20/day` (only new devices, heartbeats unlimited would be abused — now limited).
 
-## Install
+## Install (direct, no extra languages)
 
 ```bash
 omarchy plugin add https://github.com/yesheytenzin/omauser.git --enable --yes
+omarchy-restart-shell
+# Click 人 in the bar → map (Esc / outside-click to close)
 ```
+
+**No `npm`, `pip`, `node`, or `go` required.** The bar/panel is pure `QML` + `Quickshell` (preinstalled with Omarchy). The bridge is `bash` + `curl` + `jq` + `sha256sum`/`openssl` — all Arch `core`/`extra` (auto-installed by `omauser-setup.sh` if missing). `assets/countries.json` is bundled; the only network is `https://omauser.yesheytenzin09.workers.dev` (Cloudflare Worker + KV, already deployed).
 
 Installing/enabling the plugin registers the device automatically
 (opt-in by default). Opt out any time from the panel → **Remove my device**;

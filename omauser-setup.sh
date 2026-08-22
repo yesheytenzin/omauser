@@ -24,6 +24,22 @@ say()  { printf '\033[1;36m[omauser]\033[0m %s\n' "$*"; }
 
 mkdir -p "$RUNTIME"
 
+# Direct install - ensure base deps (all are Arch core, no npm/pip/node)
+for cmd in curl jq; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    say "installing missing dependency: $cmd"
+    if command -v pacman >/dev/null 2>&1; then
+      sudo pacman -Sy --noconfirm "$cmd" 2>&1 | tail -3 || {
+        printf '\033[1;31m[omauser]\033[0m please install %s: sudo pacman -S %s\n' "$cmd" "$cmd" >&2
+        exit 1
+      }
+    else
+      printf '\033[1;31m[omauser]\033[0m missing %s - please install %s\n' "$cmd" "$cmd" >&2
+      exit 1
+    fi
+  fi
+done
+
 if [[ -x "$BRIDGE_DST" && -f "$VERSION_FILE" && "$(cat "$VERSION_FILE")" == "$VERSION" && -f "$CONFIG" ]]; then
   say "bridge $VERSION already installed"
   exit 0
