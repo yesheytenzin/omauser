@@ -197,17 +197,28 @@ Item {
     function drawDots(ctx) {
         var maxCount = 1
         for (var i = 0; i < preparedDots.length; i++) maxCount = Math.max(maxCount, Number(preparedDots[i].dot.count) || 0)
+        // "My" dot = the dot in MY country nearest to my current city cell.
+        // IP-city lookups can jitter between neighboring cities between
+        // requests, so nearest-in-country is robust where exact-cell fails.
+        var bestIdx = -1, bestD = Infinity
+        if (root.myCellLat !== -999) {
+            for (var m = 0; m < preparedDots.length; m++) {
+                var mr = preparedDots[m]
+                if (String(mr.dot.code).toUpperCase() !== String(root.myCountryCode).toUpperCase()) continue
+                var mdx = mr.dot.lat - root.myCellLat, mdy = mr.dot.lon - root.myCellLon
+                var md = mdx * mdx + mdy * mdy
+                if (md < bestD) { bestD = md; bestIdx = m }
+            }
+        }
         var W = root.mapWidth
         var offsets = [0, -W, W]
         for (var d = 0; d < preparedDots.length; d++) {
             var row = preparedDots[d]
             var share = Math.sqrt((Number(row.dot.count) || 0) / maxCount)
-            // Red = the dot at MY city cell (this device). Country match is
-            // required too; when our own geo is unknown, fall back to
-            // highlighting the whole country as before.
+            // Red = nearest-in-country dot to my cell; unknown geo → country
+            // highlight fallback. Everyone else's dots stay blue.
             var byCountry = String(row.dot.code).toUpperCase() === String(root.myCountryCode).toUpperCase()
-            var cellMatch = Math.abs(row.lat - root.myCellLat) < 0.001 && Math.abs(row.lon - root.myCellLon) < 0.001
-            var mine = byCountry && (root.myCellLat === -999 ? true : cellMatch)
+            var mine = (root.myCellLat === -999) ? byCountry : (d === bestIdx)
             var base = mine ? root.myColor : root.otherColor
             var radius = 1.6 + share * 1.8
             if (mine) radius += 1.2
