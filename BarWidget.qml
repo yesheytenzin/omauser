@@ -254,14 +254,17 @@ BarWidget {
     RowLayout {
         id: row
         anchors.fill: parent
-        spacing: 0
+        spacing: 6
 
         BarIconButton {
             id: button
             bar: root.bar
-            text: "\uf0ac"
+            text: "\uf57d" // globe-americas - more distinctive than \uf0ac
             slotSize: Style.bar.statusSlot
-            fontSize: Style.font.caption
+            fontSize: Style.bar.iconFont
+            active: root.registered && !root.optedOut
+            useActiveColor: true
+            activeColor: Color.accent
             tooltipText: root.optedOut
                 ? "Omauser \u2022 not on the map \u2022 " + root.fmt(root.total) + " users \u2022 click to join"
                 : (root.bridgeReady
@@ -271,30 +274,68 @@ BarWidget {
         }
 
         Rectangle {
-            Layout.preferredWidth: 6
-            Layout.preferredHeight: 6
+            id: countPill
+            visible: root.bridgeReady
             Layout.alignment: Qt.AlignVCenter
-            Layout.leftMargin: 2
-            radius: 3
-            color: root.registered && !root.optedOut
-                ? Color.accent
-                : (root.optedOut ? Color.urgent : Qt.darker(Color.foreground, 1.6))
-            opacity: root.bridgeReady ? 1.0 : 0.4
+            implicitWidth: Math.max(28, pillText.implicitWidth + 16)
+            implicitHeight: 18
+            radius: 9
+            color: root.optedOut
+                ? Qt.rgba(Color.urgent.r, Color.urgent.g, Color.urgent.b, 0.14)
+                : (root.registered
+                    ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.14)
+                    : Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.08))
+            border.width: 1
+            border.color: root.optedOut
+                ? Color.urgent
+                : (root.registered ? Color.accent : Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.18))
+            opacity: root.bridgeReady ? 1.0 : 0.6
 
-            Behavior on color { ColorAnimation { duration: 160 } }
+            Behavior on color { ColorAnimation { duration: 180 } }
+            Behavior on border.color { ColorAnimation { duration: 180 } }
+
+            Text {
+                id: pillText
+                anchors.centerIn: parent
+                text: root.countLabel
+                color: root.optedOut ? Color.urgent : (root.registered ? Color.accent : Color.foreground)
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                font.pixelSize: Style.font.caption
+                font.weight: Font.Medium
+                verticalAlignment: Text.AlignVCenter
+                renderType: Text.NativeRendering
+            }
+
+            // Keep id for compatibility
+            Text {
+                id: countText
+                visible: false
+                text: root.countLabel
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.togglePanel()
+            }
         }
 
         Text {
-            id: countText
-            text: root.countLabel
-            color: root.bar ? root.bar.barForeground : Color.foreground
+            id: activeText
+            visible: root.bridgeReady && root.total > 0
+            Layout.alignment: Qt.AlignVCenter
+            text: "· " + root.fmt(root.active30d) + " active"
+            color: Qt.darker(root.bar ? root.bar.barForeground : Color.foreground, 1.15)
             font.family: root.bar ? root.bar.fontFamily : Style.font.family
             font.pixelSize: Style.font.caption
+            font.weight: Font.Normal
+            opacity: 0.85
             verticalAlignment: Text.AlignVCenter
             renderType: Text.NativeRendering
 
             MouseArea {
                 anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
                 onClicked: root.togglePanel()
             }
         }
