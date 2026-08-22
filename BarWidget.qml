@@ -208,6 +208,10 @@ BarWidget {
         command: ["bash", root.bridge, "stats"]
         onExited: function(exitCode) {
             root.lastError = exitCode === 0 ? "" : "offline — showing last cached data";
+            // Backoff bookkeeping: success resets to normal 5-min cadence.
+            if (exitCode === 0) root.statsFails = 0;
+            else root.statsFails = Math.min(root.statsFails + 1, 6);
+            statsTimer.interval = root.nextStatsInterval()
             root.readStatsCache();
         }
     }
@@ -240,17 +244,27 @@ BarWidget {
         command: ["bash", root.bridge, "heartbeat"]
     }
 
+    // Offline backoff: after consecutive failed polls, double the interval up
+    // to a ~5h cap so an offline laptop settles into ~6 requests/day. Any
+    // success resets instantly to the normal 5-min freshness.
+    property int statsFails: 0
+    readonly property int statsBaseInterval: 300000
+
+    function nextStatsInterval() {
+        const backoff = Math.min(1 << Math.min(root.statsFails, 6), 64)
+        const base = root.statsBaseInterval * backoff
+        return base + Math.floor(Math.random() * base * 0.15 - base * 0.075)
+    }
+
     Timer {
         id: statsTimer
-        // 5min base + jitter ±45s to avoid thundering herd on free tier
-        interval: 300000 + Math.floor(Math.random() * 90000 - 45000)
+        interval: root.statsBaseInterval
         repeat: true
         triggeredOnStart: true
         running: root.bridgeReady
         onTriggered: {
             root.fetchStats()
-            // re-randomize next interval
-            statsTimer.interval = 300000 + Math.floor(Math.random() * 90000 - 45000)
+            statsTimer.interval = root.nextStatsInterval()
         }
     }
 

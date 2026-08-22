@@ -35,6 +35,10 @@ This is the whole contract — the server cannot learn more:
   unavailable, the dot falls back to the country centroid.
 - Records are deduplicated by salted hash and expire after 12 months.
   `leave` deletes the record server-side in O(1).
+- Network-friendly by design: counts poll every ~5 min (shared server cache
+  absorbs it), heartbeats fire once a day, and polling **backs off
+  automatically while offline** — an unreachable machine settles into a few
+  requests per day until connectivity returns.
 - Rate limits: new registrations 100/IP/day + 60/hash/day; heartbeats of
   known devices are exempt.
 
