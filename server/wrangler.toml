@@ -1,0 +1,16 @@
+name = "omauser"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# Retention: device records carry a 1-year TTL in KV; no cron required.
+[triggers]
+crons = ["0 4 * * *"]
+
+[[kv_namespaces]]
+binding = "OMAUSER"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Local dev:  npx wrangler dev
+# Deploy:     npx wrangler deploy
+# After deploy, point the plugin at the worker:
+#   omauser-setup.sh https://omauser.<your-subdomain>.workers.dev
