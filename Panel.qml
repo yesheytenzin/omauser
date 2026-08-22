@@ -31,9 +31,13 @@ Panel {
 
     function fetchMap() {
         if (mapProc.running) return
+        // Fast read: show cached map instantly, then refresh in background
+        if (!loading) readMapCache()
         loading = true
         offline = false
         mapProc.running = true
+        // Also refresh bar counts in parallel for fast UI
+        if (hostWidget && hostWidget.fetchStats) hostWidget.fetchStats()
     }
 
     function readMapCache() {
@@ -106,6 +110,8 @@ Panel {
     function openFromHotkey() {
         root.controller.open = false
         root.controller.open = true
+        // Fast open: show cache immediately, then network refresh
+        root.readMapCache()
         root.fetchMap()
     }
     function close() { root.controller.hide() }
